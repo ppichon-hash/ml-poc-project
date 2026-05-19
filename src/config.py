@@ -41,11 +41,6 @@ MODELS = {
         "description": "Gradient boosting optimisé — meilleur modèle supervisé.",
         "path": MODELS_DIR / "xgboost.joblib",
     },
-    "lightgbm": {
-        "name": "LightGBM",
-        "description": "Gradient boosting Microsoft, très rapide sur données tabulaires.",
-        "path": MODELS_DIR / "lightgbm.joblib",
-    },
     "kmeans": {
         "name": "KMeans",
         "description": "Modèle non supervisé, identifie les profils d'assurés.",

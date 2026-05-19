@@ -187,7 +187,8 @@ def load_data() -> pd.DataFrame:
 @st.cache_resource(show_spinner="Chargement des modèles…")
 def load_models() -> dict:
     models: dict = {}
-    for key, fname in [("rf", "random_forest.joblib"), ("xgb", "xgboost.joblib"), ("kmeans", "kmeans.joblib")]:
+    for key, fname in [("rf", "random_forest.joblib"), ("xgb", "xgboost.joblib"),
+                       ("kmeans", "kmeans.joblib")]:
         p = MODELS_DIR / fname
         if p.exists():
             try:

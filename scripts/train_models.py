@@ -13,7 +13,6 @@ from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
-import lightgbm as lgb
 
 from config import DATA_DIR, MODELS_DIR, MODEL_METRICS_FILE
 from data import FEATURE_COLS, load_dataset_split
@@ -76,33 +75,6 @@ print(f"  Accuracy : {m['accuracy']:.4f}  F1 : {m['f1']:.4f}")
 metrics_rows.append({"model_key": "xgboost", "model_name": "XGBoost",
                      "model_path": str(xgb_path), **{k: round(v, 4) for k, v in m.items()}})
 
-# ── LightGBM (hyperparamètres optimisés par RandomizedSearchCV) ───────────────
-print("Entraînement LightGBM (tuned)...")
-lgbm = lgb.LGBMClassifier(
-    n_estimators=300,
-    max_depth=8,
-    learning_rate=0.03,
-    num_leaves=63,
-    subsample=0.9,
-    colsample_bytree=0.6,
-    min_child_samples=10,
-    reg_alpha=0.5,
-    reg_lambda=0.1,
-    scale_pos_weight=scale_pos,
-    random_state=42,
-    n_jobs=-1,
-    verbose=-1,
-)
-lgbm.fit(X_train, y_train)
-lgbm_path = MODELS_DIR / "lightgbm.joblib"
-joblib.dump(lgbm, lgbm_path)
-print(f"  Sauvegardé : {lgbm_path}")
-
-y_pred_lgbm = lgbm.predict(X_test)
-m = compute_metrics(y_test, y_pred_lgbm)
-print(f"  Accuracy : {m['accuracy']:.4f}  F1 : {m['f1']:.4f}")
-metrics_rows.append({"model_key": "lightgbm", "model_name": "LightGBM",
-                     "model_path": str(lgbm_path), **{k: round(v, 4) for k, v in m.items()}})
 
 # ── KMeans ────────────────────────────────────────────────────────────────────
 print("Entraînement KMeans (3 clusters)...")
