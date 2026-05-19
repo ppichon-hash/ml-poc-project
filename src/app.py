@@ -1,4 +1,4 @@
-"""Matmut — Analyse du risque d'accident grave. Streamlit app."""
+"""Matmut — Prédiction des accidents graves. Streamlit app."""
 from __future__ import annotations
 
 import sys
@@ -18,15 +18,15 @@ import streamlit as st
 from config import DATA_DIR, MODEL_METRICS_FILE, MODELS_DIR
 
 # ── Palette Matmut ────────────────────────────────────────────────────────────
-NAVY   = "#CC0000"   # Rouge Matmut (primary)
-ORANGE = "#FF8C00"   # Orange doré (accents, highlights)
+NAVY   = "#CC0000"
+ORANGE = "#FF6B00"
 WHITE  = "#FFFFFF"
-LIGHT  = "#FFF6F6"   # Fond légèrement rosé
-DARK   = "#1A1A1A"
-DARK2  = "#7A0000"   # Bordeaux foncé (sidebar)
+LIGHT  = "#FFF6F6"
+DARK   = "#0A1628"
+DARK2  = "#7A0000"
 GREY   = "#6B7280"
 GREEN  = "#10B981"
-RED    = "#CC0000"
+RED    = "#D32027"
 YELLOW = "#F59E0B"
 
 # ── Codes BAAC → labels lisibles ─────────────────────────────────────────────
@@ -189,8 +189,7 @@ def load_data() -> pd.DataFrame:
 @st.cache_resource(show_spinner="Chargement des modèles…")
 def load_models() -> dict:
     models: dict = {}
-    for key, fname in [("rf", "random_forest.joblib"), ("xgb", "xgboost.joblib"),
-                       ("lgbm", "lightgbm.joblib"), ("kmeans", "kmeans.joblib")]:
+    for key, fname in [("rf", "random_forest.joblib"), ("xgb", "xgboost.joblib"), ("kmeans", "kmeans.joblib")]:
         p = MODELS_DIR / fname
         if p.exists():
             try:
@@ -255,29 +254,29 @@ def _info_card(emoji: str, title: str, body: str, border: str = NAVY) -> str:
 def page_contexte(df: pd.DataFrame) -> None:
     st.markdown(f"""
     <div style="
-        background: linear-gradient(135deg, {NAVY} 0%, #990000 50%, {DARK2} 100%);
+        background: linear-gradient(135deg, {NAVY} 0%, #005BAC 50%, {DARK2} 100%);
         border-radius: 20px; padding: 48px 40px; margin-bottom: 32px;
-        box-shadow: 0 8px 32px rgba(204,0,0,0.30);
-        border: 1px solid rgba(255,140,0,0.4);
+        box-shadow: 0 8px 32px rgba(0,48,135,0.30);
+        border: 1px solid rgba(255,107,0,0.4);
     ">
-        <div style="font-size:3.5rem; margin-bottom:16px;">🛡️</div>
+        <div style="font-size:3.5rem; margin-bottom:16px;">🛣️</div>
         <h1 style="font-size:2.4rem; color:{WHITE} !important; margin:0; font-weight:900;">
-            Matmut — Analyse du Risque Assuré
+            Matmut
         </h1>
         <h2 style="font-size:1.3rem; color:{ORANGE} !important; margin:10px 0 16px; font-weight:700;">
-            Identification des profils à risque d'accident grave
+            Prédiction des accidents graves
         </h2>
-        <p style="color:rgba(255,255,255,0.85); font-size:1.05rem; max-width:720px; line-height:1.7; margin:0;">
-            Système de scoring basé sur le Machine Learning pour identifier les profils d'assurés
-            les plus exposés aux accidents graves. Outil d'aide à la tarification, à la prévention
-            et à l'accompagnement personnalisé des clients Matmut.
+        <p style="color:rgba(255,255,255,0.85); font-size:1.05rem; max-width:680px; line-height:1.7; margin:0;">
+            Système d'aide à la décision basé sur le Machine Learning pour anticiper
+            la gravité des accidents sur le réseau autoroutier et optimiser le déploiement
+            des équipes d'intervention.
         </p>
         <div style="margin-top:24px; display:flex; gap:10px; flex-wrap:wrap;">
-            <span style="background:rgba(255,140,0,0.2); border:1px solid {ORANGE}; border-radius:20px;
+            <span style="background:rgba(255,107,0,0.2); border:1px solid {ORANGE}; border-radius:20px;
                          padding:6px 16px; color:{WHITE}; font-size:0.85rem;">🤖 Machine Learning</span>
             <span style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3);
                          border-radius:20px; padding:6px 16px; color:{WHITE}; font-size:0.85rem;">
-                📊 {len(df['Num_Acc'].unique() if 'Num_Acc' in df.columns else df):,} sinistres analysés</span>
+                📊 {len(df['Num_Acc'].unique() if 'Num_Acc' in df.columns else df):,} accidents analysés</span>
             <span style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3);
                          border-radius:20px; padding:6px 16px; color:{WHITE}; font-size:0.85rem;">
                 📅 2020 – 2024</span>
@@ -292,9 +291,9 @@ def page_contexte(df: pd.DataFrame) -> None:
     pct_grave = df["target"].mean() * 100
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("👤 Assurés analysés",    f"{len(df):,}")
-    c2.metric("🚗 Sinistres uniques",   f"{n_acc:,}")
-    c3.metric("⚠️ Sinistres graves",    f"{pct_grave:.1f}%")
+    c1.metric("🚗 Usagers analysés",    f"{len(df):,}")
+    c2.metric("🚧 Accidents uniques",   f"{n_acc:,}")
+    c3.metric("⚠️ Accidents graves",    f"{pct_grave:.1f}%")
     c4.metric("📅 Période couverte",    "2020 – 2024")
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -303,16 +302,14 @@ def page_contexte(df: pd.DataFrame) -> None:
     st.markdown(f"""
     <div style="background:{WHITE}; border:1px solid #E5E7EB; border-left:5px solid {ORANGE};
                 border-radius:12px; padding:24px 28px; margin-bottom:24px;
-                box-shadow:0 2px 8px rgba(204,0,0,0.08);">
+                box-shadow:0 2px 8px rgba(0,48,135,0.08);">
         <p style="color:{DARK}; font-size:1rem; line-height:1.8; margin:0;">
-            Matmut assure <strong style="color:{NAVY};">plus de 4,5 millions d'assurés</strong> en France.
-            Ce système identifie en temps réel si le profil d'un assuré le rend statistiquement
-            plus susceptible d'être impliqué dans un accident
-            <strong style="color:{NAVY};">grave (hospitalisation ou décès)</strong>
+            Matmut gère <strong style="color:{NAVY};">plus de 4 600 km d'autoroutes</strong> en France
+            et doit chaque jour décider du niveau d'intervention à déployer lors d'un accident.
+            Ce système prédit en temps réel si un accident est susceptible d'être
+            <strong style="color:{RED};">grave (hospitalisation ou décès)</strong>
             ou <strong style="color:{GREEN};">léger (indemne ou blessé léger)</strong>,
-            permettant d'adapter la <strong>tarification</strong>, de cibler les
-            <strong>campagnes de prévention</strong> et de proposer un
-            <strong>accompagnement personnalisé</strong> aux profils à risque.
+            permettant d'optimiser le déploiement des équipes de secours et de réduire les temps d'intervention.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -320,16 +317,16 @@ def page_contexte(df: pd.DataFrame) -> None:
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(_info_card(
-            "📊", "Dashboard sinistres",
-            "Visualisez la carte des accidents avec leur gravité, "
-            "les tendances par période, météo, profil d'usager et les zones à risque.",
+            "📊", "Dashboard accidents",
+            "Visualisez la carte des accidents sur autoroutes avec leur gravité, "
+            "les tendances mensuelles, par météo, par luminosité et les zones à risque.",
             NAVY,
         ), unsafe_allow_html=True)
     with col2:
         st.markdown(_info_card(
-            "🎯", "Scoring de risque assuré",
-            "Renseignez le profil de l'assuré (âge, sexe, véhicule, comportement…) "
-            "et obtenez un score de risque avec recommandation tarifaire Matmut.",
+            "🚨", "Prédiction en temps réel",
+            "Renseignez les conditions de l'accident (météo, luminosité, type de véhicule…) "
+            "et obtenez une évaluation du risque avec recommandation d'intervention Matmut.",
             ORANGE,
         ), unsafe_allow_html=True)
     with col3:
@@ -374,7 +371,7 @@ def page_contexte(df: pd.DataFrame) -> None:
 # ── Page 2 — Dashboard accidents ──────────────────────────────────────────────
 
 def page_dashboard(df: pd.DataFrame) -> None:
-    _banner("📊 Dashboard accidents autoroutes", "Analyse des accidents corporels sur le réseau Vinci (2020–2024)")
+    _banner("📊 Dashboard accidents autoroutes", "Analyse des accidents corporels sur le réseau Matmut (2020–2024)")
 
     # ── Filtres ──────────────────────────────────────────────────────────────
     with st.expander("🔽 Filtres", expanded=True):
@@ -605,16 +602,16 @@ def page_dashboard(df: pd.DataFrame) -> None:
 # ── Page 3 — Prédiction gravité ───────────────────────────────────────────────
 
 def page_prediction(df: pd.DataFrame, models: dict) -> None:
-    _banner("🎯 Scoring de risque assuré", "Identifiez le niveau de risque d'accident grave d'un profil Matmut")
+    _banner("🚨 Prédiction de la gravité", "Évaluez le risque et recevez une recommandation d'intervention Matmut")
 
-    if not any(k in models for k in ["rf", "xgb", "lgbm"]):
+    if "rf" not in models and "xgb" not in models:
         st.error("Modèles non chargés. Lancez `python scripts/train_models.py` d'abord.")
         return
 
     # Médianes pour les features non saisies
     medians = {col: float(df[col].median()) for col in FEATURE_COLS if col in df.columns}
 
-    st.markdown("<h3>Conditions de conduite</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>Conditions de l'accident</h3>", unsafe_allow_html=True)
 
     # ── Ligne 1 : Conditions routières ────────────────────────────────────────
     c1, c2 = st.columns(2)
@@ -656,7 +653,7 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Ligne 2 : Profil de l'usager ─────────────────────────────────────────
-    st.markdown(f"<h3 style='margin-top:20px;'>Profil de l'assuré</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='margin-top:20px;'>Profil de l'usager</h3>", unsafe_allow_html=True)
     cu1, cu2, cu3, cu4 = st.columns(4)
     with cu1:
         sexe_choice = st.selectbox("👤 Sexe",
@@ -691,37 +688,34 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
     st.markdown("<br>", unsafe_allow_html=True)
     _, btn_col, _ = st.columns([1, 2, 1])
     with btn_col:
-        clicked = st.button("🎯 Calculer le score de risque", type="primary", use_container_width=True)
+        clicked = st.button("🚨 Évaluer le risque", type="primary", use_container_width=True)
 
     if clicked:
         try:
-            probas: dict[str, float] = {}
+            probas: list[float] = []
             if "xgb" in models:
-                probas["xgb"] = float(models["xgb"].predict_proba(input_df.astype(float))[0][1])
-            if "lgbm" in models:
-                probas["lgbm"] = float(models["lgbm"].predict_proba(input_df)[0][1])
+                probas.append(float(models["xgb"].predict_proba(input_df.astype(float))[0][1]))
             if "rf" in models:
-                probas["rf"] = float(models["rf"].predict_proba(input_df)[0][1])
-            avg_proba = float(np.mean(list(probas.values()))) if probas else 0.5
+                probas.append(float(models["rf"].predict_proba(input_df)[0][1]))
+            avg_proba = float(np.mean(probas)) if probas else 0.5
             prediction = int(avg_proba >= 0.5)
 
             st.markdown("<br>", unsafe_allow_html=True)
             if prediction == 1:
-                st.error(f"🔴 **PROFIL À RISQUE ÉLEVÉ — Sinistre grave probable**  "
-                         f"(score de risque : {avg_proba*100:.1f}%)")
+                st.error(f"⚠️ **ACCIDENT GRAVE — Déployer équipe renforcée**  "
+                         f"(probabilité grave : {avg_proba*100:.1f}%)")
             else:
-                st.success(f"🟢 **PROFIL STANDARD — Sinistre léger probable**  "
-                           f"(score de risque : {avg_proba*100:.1f}%)")
+                st.success(f"✅ **Accident léger — Intervention standard**  "
+                           f"(probabilité grave : {avg_proba*100:.1f}%)")
 
             if len(probas) > 1:
-                metric_cols = st.columns(len(probas) + 1)
-                labels = {"xgb": "⚡ XGBoost", "lgbm": "🚀 LightGBM", "rf": "🌲 Random Forest"}
-                for col_w, (k, v) in zip(metric_cols, probas.items()):
-                    col_w.metric(labels.get(k, k), f"{v*100:.1f}%", "Grave" if v >= 0.5 else "Léger")
-                metric_cols[-1].metric("🤝 Consensus", f"{avg_proba*100:.1f}%", "Grave" if prediction == 1 else "Léger")
+                pm1, pm2, pm3 = st.columns(3)
+                pm1.metric("⚡ XGBoost",       f"{probas[0]*100:.1f}%", "Grave" if probas[0] >= 0.5 else "Léger")
+                pm2.metric("🌲 Random Forest",  f"{probas[1]*100:.1f}%", "Grave" if probas[1] >= 0.5 else "Léger")
+                pm3.metric("🤝 Consensus",      f"{avg_proba*100:.1f}%", "Grave" if prediction == 1 else "Léger")
 
             st.markdown(
-                f"<p style='font-weight:600; margin-top:16px; color:{NAVY};'>Score de risque Matmut</p>",
+                f"<p style='font-weight:600; margin-top:16px; color:{NAVY};'>Probabilité d'accident grave</p>",
                 unsafe_allow_html=True)
             st.progress(float(avg_proba))
 
@@ -731,7 +725,7 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
                 mode="gauge+number",
                 value=avg_proba * 100,
                 number=dict(suffix="%", font=dict(color=NAVY, size=40)),
-                title=dict(text="Score de risque sinistre grave", font=dict(color=DARK, size=14)),
+                title=dict(text="Probabilité de gravité", font=dict(color=DARK, size=14)),
                 gauge=dict(
                     axis=dict(range=[0, 100], tickcolor=DARK),
                     bar=dict(color=bar_color, thickness=0.3),
@@ -754,25 +748,25 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
             with st.expander("📋 Recommandation Matmut"):
                 if prediction == 1:
                     st.markdown(f"""
-                    <div style="background:#FEE2E2; border-left:5px solid {NAVY}; border-radius:8px; padding:18px;">
-                        <strong style="color:{NAVY};">PROFIL RISQUE ÉLEVÉ — ACTIONS RECOMMANDÉES</strong><br><br>
-                        💰 Appliquer une <strong>majoration tarifaire</strong> sur la prime auto<br>
-                        📋 Proposer un <strong>contrat avec franchise modulée</strong> selon le comportement<br>
-                        📲 Proposer le <strong>télématique Matmut Drive</strong> (boîtier conduite connectée)<br>
-                        🎓 Orienter vers les <strong>stages de conduite préventive</strong><br>
-                        🤝 Affecter un <strong>conseiller dédié prévention</strong><br>
-                        📊 Déclencher un <strong>suivi sinistralité renforcé</strong>
+                    <div style="background:#FEE2E2; border-left:5px solid {RED}; border-radius:8px; padding:18px;">
+                        <strong style="color:{RED};">NIVEAU D'INTERVENTION : ÉLEVÉ</strong><br><br>
+                        🚑 Déployer ambulance et équipe médicale<br>
+                        🚒 Alerter les pompiers<br>
+                        🚔 Sécurisation complète de la zone (3 km)<br>
+                        📡 Activer les panneaux d'information dynamiques<br>
+                        ⛔ Fermeture préventive des voies concernées<br>
+                        🚁 Évaluer la nécessité d'un hélitreuillage
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
                     <div style="background:#D1FAE5; border-left:5px solid {GREEN}; border-radius:8px; padding:18px;">
-                        <strong style="color:{GREEN};">PROFIL STANDARD — CONTRAT CLASSIQUE</strong><br><br>
-                        ✅ <strong>Prime standard</strong> applicable sans majoration<br>
-                        🎁 Éligible aux <strong>réductions bonus-malus</strong><br>
-                        📩 Envoyer la <strong>documentation prévention</strong> saisonnière<br>
-                        🔄 Révision tarifaire lors du prochain renouvellement<br>
-                        ℹ️ Proposer les <strong>garanties complémentaires</strong> adaptées
+                        <strong style="color:{GREEN};">NIVEAU D'INTERVENTION : STANDARD</strong><br><br>
+                        🚗 Patrouille autoroutière<br>
+                        🔸 Baliser la zone (500 m)<br>
+                        📞 Prévenir les secours de garde<br>
+                        ℹ️ Information PMV si nécessaire<br>
+                        🔄 Surveillance du trafic aval
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -784,7 +778,7 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
 
 def page_comparaison(df: pd.DataFrame, models: dict) -> None:
     _banner("⚖️ Comparaison des modèles ML",
-            "Random Forest vs XGBoost vs KMeans — performances sur les données sinistres Matmut")
+            "Random Forest vs XGBoost vs KMeans — performances et explications")
 
     metrics_df = load_metrics()
     METRIC_KEYS = ["accuracy", "f1", "precision", "recall"]
@@ -926,35 +920,24 @@ def page_comparaison(df: pd.DataFrame, models: dict) -> None:
 
     # ── Tab 4 : Explications ─────────────────────────────────────────────────
     with t4:
-        def _get_acc(key: str) -> float:
-            if metrics_df is None: return 0.0
-            row = metrics_df[metrics_df["model_key"] == key]
-            return float(row["accuracy"].iloc[0]) * 100 if not row.empty else 0.0
-
-        rf_acc   = _get_acc("random_forest")
-        xgb_acc  = _get_acc("xgboost")
-        lgbm_acc = _get_acc("lightgbm")
-        km_acc   = _get_acc("kmeans")
+        rf_acc  = float(metrics_df[metrics_df["model_key"] == "random_forest"]["accuracy"].iloc[0]) * 100 if metrics_df is not None else 0
+        xgb_acc = float(metrics_df[metrics_df["model_key"] == "xgboost"]["accuracy"].iloc[0]) * 100 if metrics_df is not None else 0
+        km_acc  = float(metrics_df[metrics_df["model_key"] == "kmeans"]["accuracy"].iloc[0]) * 100 if metrics_df is not None else 0
 
         for emoji, name, acc, color, body in [
             ("🌲", "Random Forest", rf_acc, NAVY,
-             "Imaginez <strong>200 experts indépendants</strong> (les arbres) qui analysent chacun "
-             "le profil de l'assuré et votent. La décision finale est celle de la majorité.<br><br>"
+             "Imaginez <strong>100 experts indépendants</strong> (les arbres) qui analysent chacun "
+             "les conditions de l'accident et votent. La décision finale est celle de la majorité.<br><br>"
              "<strong>✅ Avantages :</strong> robuste, résistant au surapprentissage, feature importance lisible.<br>"
-             "<strong>⚠️ Limite :</strong> légèrement moins précis que les méthodes de boosting."),
+             "<strong>⚠️ Limite :</strong> moins réactif sur des données très déséquilibrées."),
             ("⚡", "XGBoost", xgb_acc, ORANGE,
              "XGBoost apprend de ses erreurs à chaque itération. Chaque nouvel arbre corrige "
              "les cas mal classés par le précédent — c'est le <strong>favori des compétitions ML</strong>.<br><br>"
-             "<strong>✅ Avantages :</strong> très haute performance, hyperparamètres optimisés par recherche.<br>"
-             "<strong>⚠️ Limite :</strong> boîte noire, nécessite un réglage fin."),
-            ("🚀", "LightGBM", lgbm_acc, "#00A651",
-             "Développé par Microsoft, LightGBM utilise une croissance d'arbres par feuilles "
-             "plutôt que par niveaux — <strong>plus rapide et souvent plus précis</strong> qu'XGBoost.<br><br>"
-             "<strong>✅ Avantages :</strong> très rapide, excellente gestion des données tabulaires, faible mémoire.<br>"
-             "<strong>⚠️ Limite :</strong> peut sur-apprendre sur petits datasets."),
+             "<strong>✅ Avantages :</strong> haute performance, gère bien les données déséquilibrées.<br>"
+             "<strong>⚠️ Limite :</strong> boîte noire, nécessite plus de réglage."),
             ("🔵", "KMeans (non supervisé)", km_acc, GREEN,
-             "KMeans regroupe automatiquement les profils similaires <strong>SANS connaître leur gravité</strong>. "
-             "Il détecte 3 segments naturels d'assurés sur autoroute.<br><br>"
+             "KMeans regroupe automatiquement les accidents similaires <strong>SANS connaître leur gravité</strong>. "
+             "Il détecte 3 profils naturels d'accidents sur autoroute.<br><br>"
              "<strong>✅ Avantages :</strong> non supervisé, découvre des patterns cachés.<br>"
              "<strong>⚠️ Limite :</strong> ne prédit pas directement, moins précis en classification."),
         ]:
@@ -1014,17 +997,17 @@ def page_comparaison(df: pd.DataFrame, models: dict) -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 PAGES = {
-    "🛡️ Contexte Matmut":       ("contexte",    page_contexte,    False),
-    "📊 Dashboard sinistres":   ("dashboard",   page_dashboard,   False),
-    "🎯 Scoring de risque":     ("prediction",  page_prediction,  True),
+    "🛣️ Contexte Matmut":        ("contexte",    page_contexte,    False),
+    "📊 Dashboard accidents":   ("dashboard",   page_dashboard,   False),
+    "🚨 Prédiction gravité":    ("prediction",  page_prediction,  True),
     "⚖️ Comparaison modèles":   ("comparaison", page_comparaison, True),
 }
 
 
 def build_app() -> None:
     st.set_page_config(
-        page_title="Matmut — Scoring Risque Sinistre",
-        page_icon="🛡️",
+        page_title="Matmut — IA Accidents",
+        page_icon="🛣️",
         layout="wide",
         initial_sidebar_state="expanded",
     )
@@ -1036,12 +1019,12 @@ def build_app() -> None:
     with st.sidebar:
         st.markdown(f"""
         <div style="text-align:center; padding:28px 0 18px;">
-            <div style="font-size:3rem;">🛡️</div>
+            <div style="font-size:3rem;">🛣️</div>
             <div style="color:{WHITE}; font-size:1.05rem; font-weight:900; margin-top:8px;">
                 Matmut
             </div>
             <div style="color:rgba(255,255,255,0.6); font-size:0.75rem; margin-top:4px;">
-                Scoring risque sinistre grave
+                Prédiction accidents graves
             </div>
         </div>
         <hr style="border-color:{ORANGE}; margin:0 0 14px;">
@@ -1056,13 +1039,13 @@ def build_app() -> None:
         pct_g = df["target"].mean() * 100
         st.markdown(f"""
         <div style="background:rgba(255,255,255,0.08); border-radius:10px; padding:14px; margin-top:4px;">
-            <p style="color:{ORANGE}; font-weight:800; margin:0 0 8px; font-size:0.82rem;">📊 Base sinistres</p>
-            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">👤 {len(df):,} assurés</p>
-            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🚗 {n_acc:,} sinistres</p>
+            <p style="color:{ORANGE}; font-weight:800; margin:0 0 8px; font-size:0.82rem;">📊 Dataset BAAC</p>
+            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🚗 {len(df):,} usagers</p>
+            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🚧 {n_acc:,} accidents</p>
             <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">📅 2020 – 2024</p>
-            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🛣️ Autoroutes France</p>
+            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🏎️ Autoroutes (catr=1)</p>
             <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0; font-weight:700;">
-                ⚠️ {pct_g:.1f}% sinistres graves</p>
+                ⚠️ {pct_g:.1f}% accidents graves</p>
             <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🤖 {len(models)} modèles chargés</p>
         </div>
         """, unsafe_allow_html=True)
