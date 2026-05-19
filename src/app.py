@@ -41,7 +41,16 @@ SURF_LABELS = {1: "Normale", 2: "Mouillée", 3: "Flaques", 4: "Inondée",
 CATV_LABELS = {1: "Vélo", 2: "Cyclomoteur", 3: "Voiturette", 7: "Voiture",
                10: "Utilitaire léger", 13: "Poids lourd", 14: "Poids lourd + remorque",
                15: "Tracteur routier", 17: "Autocar", 33: "Tramway", 37: "Voiture + remorque"}
-VMA_OPTIONS = [50, 70, 80, 90, 110, 130]
+INFRA_LABELS = {
+    0: "Aucune infrastructure particulière",
+    1: "Souterrain / Tunnel",
+    2: "Pont / Autopont",
+    3: "Bretelle d'échangeur",
+    5: "Carrefour aménagé",
+    7: "Zone de péage",
+    8: "Chantier / travaux",
+    9: "Autre infrastructure",
+}
 MOIS_LABELS = {1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin",
                7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"}
 
@@ -622,8 +631,9 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
         catv_choice = st.selectbox("🚗 Type de véhicule",
                                     options=list(CATV_LABELS.keys()),
                                     format_func=lambda k: CATV_LABELS[k])
-        vma_choice  = st.selectbox("⚡ Vitesse max autorisée (km/h)",
-                                    options=VMA_OPTIONS, index=VMA_OPTIONS.index(130))
+        infra_choice = st.selectbox("🏗️ Type d'infrastructure",
+                                     options=list(INFRA_LABELS.keys()),
+                                     format_func=lambda k: INFRA_LABELS[k])
         mois_choice = st.selectbox("📅 Mois",
                                     options=list(MOIS_LABELS.keys()),
                                     format_func=lambda k: MOIS_LABELS[k])
@@ -635,7 +645,7 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
     input_row = {col: medians.get(col, 0) for col in FEATURE_COLS}
     input_row.update({
         "lum": lum_choice, "atm": atm_choice, "col": col_choice,
-        "surf": surf_choice, "catv": catv_choice, "vma": vma_choice,
+        "surf": surf_choice, "catv": catv_choice, "infra": infra_choice,
         "mois": mois_choice,
     })
     input_df = pd.DataFrame([input_row])[FEATURE_COLS]
