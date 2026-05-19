@@ -854,191 +854,292 @@ def page_comparaison(df: pd.DataFrame, models: dict) -> None:
     _banner("⚖️ Comparaison des modèles ML", "Random Forest vs XGBoost vs KMeans — performances et explications")
 
     metrics_df = load_metrics()
+    METRIC_KEYS = ["accuracy", "f1", "precision", "recall"]
+    METRIC_LBLS = ["Accuracy", "F1-score", "Précision", "Recall"]
+    MODEL_COLORS = [RED, YELLOW, "#74b9ff"]
 
-    t1, t2, t3, t4 = st.tabs(["📊 Tableau des performances", "📈 Graphiques", "🔍 Feature Importance", "💡 Explications"])
+    t1, t2, t3, t4 = st.tabs(["📊 Performances", "📈 Graphiques", "🔍 Feature Importance", "💡 Explications"])
 
+    # ── Tab 1 : Tableau des performances ─────────────────────────────────────
     with t1:
-        if metrics_df is not None:
-            best_acc = metrics_df["accuracy"].max()
+        if metrics_df is None:
+            st.info("Lancez `python scripts/main.py` pour générer les métriques.")
+        else:
+            # Garder uniquement les colonnes métriques utiles
+            cols_keep = ["model_key", "model_name"] + [k for k in METRIC_KEYS if k in metrics_df.columns]
+            mdf = metrics_df[cols_keep].copy()
+            best_acc = mdf["accuracy"].max()
 
-            for _, row in metrics_df.iterrows():
-                is_best    = row.get("accuracy") == best_acc
+            for _, row in mdf.iterrows():
+                is_best    = abs(row["accuracy"] - best_acc) < 1e-9
                 border_col = YELLOW if is_best else DARK3
                 badge_html = (
-                    f" &nbsp;<span style='background:#1a3a1a; color:{GREEN}; border-radius:12px;"
-                    f" padding:3px 10px; font-size:0.78rem;'>🏆 Meilleur modèle</span>"
+                    f"&nbsp;<span style='background:#1a3a1a; color:{GREEN}; border-radius:12px;"
+                    f" padding:3px 12px; font-size:0.78rem; font-weight:700;'>🏆 Meilleur modèle</span>"
                     if is_best else ""
                 )
                 metric_blocks = ""
-                for key, lbl in [("accuracy", "Accuracy"), ("f1", "F1-score"), ("precision", "Précision"), ("recall", "Recall")]:
-                    v    = row.get(key, 0) * 100
-                    clr  = GREEN if v >= 90 else ORANGE if v >= 80 else RED
+                for key, lbl in zip(METRIC_KEYS, METRIC_LBLS):
+                    v   = float(row.get(key, 0)) * 100
+                    clr = GREEN if v >= 75 else ORANGE if v >= 60 else RED
                     metric_blocks += f"""
-                    <div style="text-align:center; background:{DARK3}; border-radius:10px; padding:12px;">
-                        <div style="color:{WHITE}; font-size:0.82rem; opacity:0.75; margin-bottom:4px;">{lbl}</div>
-                        <div style="color:{clr}; font-size:1.4rem; font-weight:800;">{v:.1f}%</div>
+                    <div style="text-align:center; background:{DARK3}; border-radius:10px; padding:14px 8px;">
+                        <div style="color:{WHITE}; font-size:0.8rem; opacity:0.7; margin-bottom:6px;">{lbl}</div>
+                        <div style="color:{clr}; font-size:1.5rem; font-weight:800;">{v:.1f}%</div>
                     </div>"""
 
                 st.markdown(f"""
                 <div style="background:{DARK2}; border:2px solid {border_col}; border-radius:14px;
-                            padding:22px 24px; margin-bottom:16px; box-shadow:0 3px 12px rgba(0,0,0,0.3);">
-                    <div style="margin-bottom:14px;">
-                        <span style="color:{YELLOW}; font-size:1.15rem; font-weight:800;">
+                            padding:22px 24px; margin-bottom:16px; box-shadow:0 3px 14px rgba(0,0,0,0.3);">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+                        <span style="color:{YELLOW}; font-size:1.2rem; font-weight:800;">
                             {row.get('model_name', row['model_key'])}
-                        </span>{badge_html}
+                        </span>
+                        {badge_html}
                     </div>
-                    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+                    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
                         {metric_blocks}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-        else:
-            st.info("Lancez `python scripts/main.py` pour générer les métriques.")
 
+    # ── Tab 2 : Graphiques ────────────────────────────────────────────────────
     with t2:
-        if metrics_df is not None:
-            metric_keys = ["accuracy", "f1", "precision", "recall"]
-            metric_lbls = ["Accuracy", "F1-score", "Précision", "Recall"]
-            colors      = [RED, YELLOW, "#74b9ff"]
+        if metrics_df is None:
+            st.info("Lancez `python scripts/main.py` pour générer les métriques.")
+        else:
+            cols_keep = ["model_key", "model_name"] + [k for k in METRIC_KEYS if k in metrics_df.columns]
+            mdf = metrics_df[cols_keep].copy()
 
+            # Bar chart groupé
             fig_bar = go.Figure()
-            for i, (_, row) in enumerate(metrics_df.iterrows()):
-                vals = [row.get(k, 0) for k in metric_keys]
+            for i, (_, row) in enumerate(mdf.iterrows()):
+                vals = [float(row.get(k, 0)) for k in METRIC_KEYS]
                 fig_bar.add_trace(go.Bar(
                     name=row["model_name"],
-                    x=metric_lbls, y=vals,
-                    marker_color=colors[i % len(colors)],
+                    x=METRIC_LBLS,
+                    y=vals,
+                    marker_color=MODEL_COLORS[i % len(MODEL_COLORS)],
                     text=[f"{v*100:.1f}%" for v in vals],
                     textposition="outside",
+                    textfont=dict(size=11),
                 ))
             fig_bar.update_layout(
                 **_fig_layout(title="Comparaison des métriques par modèle"),
                 barmode="group",
+                legend=dict(bgcolor=DARK2, bordercolor=DARK3, borderwidth=1),
             )
-            fig_bar.update_yaxes(range=[0.5, 1.05], tickformat=".0%")
+            fig_bar.update_yaxes(range=[0, 1.12], tickformat=".0%")
             st.plotly_chart(fig_bar, use_container_width=True)
 
-            cats    = metric_lbls + [metric_lbls[0]]
+            # Radar chart — layout polaire séparé (pas _fig_layout qui a xaxis/yaxis)
+            cats    = METRIC_LBLS + [METRIC_LBLS[0]]
             fig_rad = go.Figure()
-            for i, (_, row) in enumerate(metrics_df.iterrows()):
-                vals = [row.get(k, 0) for k in metric_keys]
+            for i, (_, row) in enumerate(mdf.iterrows()):
+                vals = [float(row.get(k, 0)) for k in METRIC_KEYS]
                 fig_rad.add_trace(go.Scatterpolar(
                     r=vals + [vals[0]],
                     theta=cats,
                     fill="toself",
                     name=row["model_name"],
-                    line_color=colors[i % len(colors)],
-                    fillcolor=colors[i % len(colors)] + "33",
+                    line=dict(color=MODEL_COLORS[i % len(MODEL_COLORS)], width=2),
+                    fillcolor=MODEL_COLORS[i % len(MODEL_COLORS)] + "33",
                 ))
             fig_rad.update_layout(
                 paper_bgcolor=DARK2,
-                font=dict(color=WHITE),
+                plot_bgcolor=DARK2,
+                font=dict(color=WHITE, size=12),
+                margin=dict(t=60, b=40, l=40, r=40),
                 polar=dict(
                     bgcolor=DARK2,
-                    radialaxis=dict(visible=True, range=[0, 1], gridcolor="#2d3561"),
-                    angularaxis=dict(gridcolor="#2d3561"),
+                    radialaxis=dict(
+                        visible=True, range=[0, 1],
+                        gridcolor="#2d3561", tickformat=".0%",
+                        tickfont=dict(size=9, color=WHITE),
+                    ),
+                    angularaxis=dict(gridcolor="#2d3561", tickfont=dict(size=11)),
                 ),
-                legend=dict(bgcolor=DARK2),
-                title=dict(text="Radar des performances", font=dict(color=YELLOW)),
+                legend=dict(bgcolor=DARK2, bordercolor=DARK3, borderwidth=1),
+                title=dict(text="Radar des performances", font=dict(color=YELLOW, size=15)),
             )
             st.plotly_chart(fig_rad, use_container_width=True)
-        else:
-            st.info("Lancez `python scripts/main.py` pour générer les métriques.")
 
+    # ── Tab 3 : Feature Importance ────────────────────────────────────────────
     with t3:
-        if "rf" in models:
+        if "rf" not in models:
+            st.warning("Modèle Random Forest non chargé.")
+        else:
             try:
-                importances = pd.Series(
-                    models["rf"].feature_importances_, index=FEATURE_COLS
-                ).sort_values()
-                labels     = [FEATURE_LABELS.get(f, f) for f in importances.index]
-                q70, q40   = importances.quantile(0.7), importances.quantile(0.4)
-                colors_imp = [
+                rf          = models["rf"]
+                importances = pd.Series(rf.feature_importances_, index=FEATURE_COLS).sort_values()
+                labels      = [FEATURE_LABELS.get(f, f) for f in importances.index]
+                q70, q40    = importances.quantile(0.7), importances.quantile(0.4)
+                colors_imp  = [
                     RED if v >= q70 else YELLOW if v >= q40 else "#74b9ff"
                     for v in importances.values
                 ]
+
                 fig_imp = go.Figure(go.Bar(
-                    x=importances.values, y=labels, orientation="h",
+                    x=importances.values,
+                    y=labels,
+                    orientation="h",
                     marker_color=colors_imp,
-                    text=[f"{v:.3f}" for v in importances.values],
+                    text=[f"{v*100:.1f}%" for v in importances.values],
                     textposition="outside",
+                    textfont=dict(size=11),
                 ))
-                fig_imp.update_layout(**_fig_layout(title="Feature Importance — Random Forest"))
-                fig_imp.update_xaxes(title="Importance (Gini)")
+                fig_imp.update_layout(
+                    **_fig_layout(title="Feature Importance — Random Forest (Gini)"),
+                    height=420,
+                )
+                fig_imp.update_xaxes(title="Importance", tickformat=".0%")
                 fig_imp.update_yaxes(gridcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig_imp, use_container_width=True)
 
-                st.markdown(f"<h4 style='color:{YELLOW};'>Interprétation des 3 features les plus importantes</h4>",
+                # Légende couleurs
+                st.markdown(f"""
+                <div style="display:flex; gap:20px; margin-bottom:16px; flex-wrap:wrap;">
+                    <span style="color:{RED}; font-weight:700;">■ Fort impact</span>
+                    <span style="color:{YELLOW}; font-weight:700;">■ Impact modéré</span>
+                    <span style="color:#74b9ff; font-weight:700;">■ Faible impact</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Top 3 interprétation
+                st.markdown(f"<h4 style='color:{YELLOW};'>Interprétation des 3 features clés</h4>",
                             unsafe_allow_html=True)
-                top3 = pd.Series(models["rf"].feature_importances_, index=FEATURE_COLS).nlargest(3)
+                top3 = pd.Series(rf.feature_importances_, index=FEATURE_COLS).nlargest(3)
                 for feat, val in top3.items():
                     lbl  = FEATURE_LABELS.get(feat, feat)
                     expl = FEATURE_EXPLAIN.get(feat, ("",))[0]
-                    st.markdown(f"- **{lbl}** (score {val:.3f}) — {expl}")
+                    bar_w = min(int(val * 600), 100)
+                    st.markdown(f"""
+                    <div style="background:{DARK2}; border:1px solid {DARK3}; border-radius:10px;
+                                padding:14px 18px; margin-bottom:10px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <span style="color:{YELLOW}; font-weight:700;">{lbl}</span>
+                            <span style="color:{WHITE}; font-weight:600;">{val*100:.1f}%</span>
+                        </div>
+                        <div style="background:{DARK3}; border-radius:4px; height:8px; margin-bottom:8px;">
+                            <div style="background:{RED}; border-radius:4px; height:8px; width:{bar_w}%;"></div>
+                        </div>
+                        <p style="color:{WHITE}; font-size:0.85rem; opacity:0.8; margin:0;">{expl}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
             except Exception as exc:
                 st.error(f"Erreur feature importance : {exc}")
-        else:
-            st.warning("Modèle Random Forest non chargé.")
 
+    # ── Tab 4 : Explications ──────────────────────────────────────────────────
     with t4:
-        e1, e2, e3 = st.columns(3)
-        with e1:
-            with st.expander("🌲 Random Forest — Comment ça marche ?", expanded=True):
-                st.markdown(f"""
-                <p style="color:{WHITE}; line-height:1.75;">
-                    Imaginez <strong style="color:{YELLOW};">200 experts indépendants</strong>
-                    (les "arbres") qui chacun analysent la carte et votent.
-                    La décision finale est celle de la majorité.
-                </p>
-                <p style="color:{WHITE}; line-height:1.75;">
-                    <strong>✅ Avantages :</strong> très stable, résistant aux données aberrantes,
-                    facile à interpréter via la feature importance.<br>
-                    <strong>⚠️ Limite :</strong> parfois moins précis que XGBoost sur des données complexes.
-                </p>
-                """, unsafe_allow_html=True)
-        with e2:
-            with st.expander("⚡ XGBoost — Comment ça marche ?", expanded=True):
-                st.markdown(f"""
-                <p style="color:{WHITE}; line-height:1.75;">
-                    XGBoost apprend de ses erreurs à chaque round. Chaque nouvel arbre corrige
-                    les cas mal classés par le précédent.
-                    C'est le <strong style="color:{YELLOW};">favori des compétitions ML</strong>.
-                </p>
-                <p style="color:{WHITE}; line-height:1.75;">
-                    <strong>✅ Avantages :</strong> haute performance, gère bien le déséquilibre de classes.<br>
-                    <strong>⚠️ Limite :</strong> nécessite plus de réglage, moins interprétable.
-                </p>
-                """, unsafe_allow_html=True)
-        with e3:
-            with st.expander("🔵 KMeans — Quels profils identifiés ?", expanded=True):
-                if "kmeans" in models:
-                    try:
-                        km     = models["kmeans"]
-                        X      = df[FEATURE_COLS].astype(float)
-                        labels = km.predict(X)
-                        df_c   = df.copy()
-                        df_c["cluster"] = labels
-                        for cid, cname in CLUSTER_NAMES.items():
-                            sub = df_c[df_c["cluster"] == cid]
-                            if sub.empty:
-                                continue
-                            dominant_rarity = sub["rarity"].mode()[0] if not sub["rarity"].mode().empty else "N/A"
-                            st.markdown(f"""
-                            <div style="background:{DARK3}; border-radius:8px; padding:12px; margin-bottom:8px;">
-                                <strong style="color:{CLUSTER_COLORS[cid]};">
-                                    {CLUSTER_EMOJIS[cid]} {cname}
-                                </strong><br>
-                                <span style="color:{WHITE}; font-size:0.83rem; line-height:1.6;">
-                                    {len(sub):,} cartes<br>
-                                    Prix moyen : <strong>${sub['market_price'].mean():.2f}</strong><br>
-                                    Rareté dominante : {dominant_rarity}
-                                </span>
+        st.markdown(f"<h3>Comment fonctionnent nos 3 modèles ?</h3>", unsafe_allow_html=True)
+
+        # RF
+        st.markdown(f"""
+        <div style="background:{DARK2}; border:1px solid {DARK3}; border-left:4px solid {RED};
+                    border-radius:12px; padding:20px 24px; margin-bottom:16px;">
+            <div style="font-size:1.6rem; margin-bottom:8px;">🌲</div>
+            <div style="color:{YELLOW}; font-size:1.1rem; font-weight:800; margin-bottom:10px;">
+                Random Forest
+                <span style="background:{GREEN}22; color:{GREEN}; border-radius:8px;
+                             padding:2px 10px; font-size:0.78rem; margin-left:8px;">
+                    Accuracy : {float(metrics_df[metrics_df['model_key']=='random_forest']['accuracy'].iloc[0])*100:.1f}% 🏆
+                </span>
+            </div>
+            <p style="color:{WHITE}; line-height:1.75; margin:0;">
+                Imaginez <strong style="color:{YELLOW};">200 experts indépendants</strong> (les "arbres") qui analysent
+                chacun la carte et votent. La décision finale est celle de la majorité.<br><br>
+                <strong>✅ Avantages :</strong> très stable, résistant aux données aberrantes,
+                facile à interpréter via la feature importance.<br>
+                <strong>⚠️ Limite :</strong> peut être plus lent à l'entraînement sur de très gros datasets.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # XGBoost
+        st.markdown(f"""
+        <div style="background:{DARK2}; border:1px solid {DARK3}; border-left:4px solid {YELLOW};
+                    border-radius:12px; padding:20px 24px; margin-bottom:16px;">
+            <div style="font-size:1.6rem; margin-bottom:8px;">⚡</div>
+            <div style="color:{YELLOW}; font-size:1.1rem; font-weight:800; margin-bottom:10px;">
+                XGBoost
+                <span style="background:{ORANGE}22; color:{ORANGE}; border-radius:8px;
+                             padding:2px 10px; font-size:0.78rem; margin-left:8px;">
+                    Accuracy : {float(metrics_df[metrics_df['model_key']=='xgboost']['accuracy'].iloc[0])*100:.1f}%
+                </span>
+            </div>
+            <p style="color:{WHITE}; line-height:1.75; margin:0;">
+                XGBoost apprend de ses erreurs à chaque round. Chaque nouvel arbre
+                se concentre sur les cas mal classés par le précédent.
+                C'est le <strong style="color:{YELLOW};">favori des compétitions ML</strong>.<br><br>
+                <strong>✅ Avantages :</strong> haute performance, gère bien les données déséquilibrées.<br>
+                <strong>⚠️ Limite :</strong> nécessite plus de réglage, moins interprétable.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # KMeans
+        km_acc = float(metrics_df[metrics_df['model_key']=='kmeans']['accuracy'].iloc[0]) * 100 if metrics_df is not None else 0
+        st.markdown(f"""
+        <div style="background:{DARK2}; border:1px solid {DARK3}; border-left:4px solid #74b9ff;
+                    border-radius:12px; padding:20px 24px; margin-bottom:16px;">
+            <div style="font-size:1.6rem; margin-bottom:8px;">🔵</div>
+            <div style="color:{YELLOW}; font-size:1.1rem; font-weight:800; margin-bottom:10px;">
+                KMeans — Clustering non supervisé
+                <span style="background:#74b9ff22; color:#74b9ff; border-radius:8px;
+                             padding:2px 10px; font-size:0.78rem; margin-left:8px;">
+                    Accuracy : {km_acc:.1f}%
+                </span>
+            </div>
+            <p style="color:{WHITE}; line-height:1.75; margin:0;">
+                KMeans regroupe automatiquement les cartes similaires <strong>SANS connaître les prix cibles</strong>.
+                Il détecte des patterns cachés dans les données et identifie 3 profils naturels.<br><br>
+                <strong>✅ Avantages :</strong> non supervisé, découvre des segments naturels dans les données.<br>
+                <strong>⚠️ Limite :</strong> ne prédit pas directement la valorisation, moins précis en classification.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Clusters KMeans
+        st.markdown(f"<h4 style='color:{YELLOW};'>Les 3 profils identifiés par KMeans</h4>", unsafe_allow_html=True)
+        if "kmeans" in models:
+            try:
+                km  = models["kmeans"]
+                # fillna(0) pour éviter le crash sur les NaN
+                X   = df[FEATURE_COLS].fillna(0).astype(float)
+                lbs = km.predict(X)
+                df_c = df.copy()
+                df_c["cluster"] = lbs
+
+                cl1, cl2, cl3 = st.columns(3)
+                for col, (cid, cname) in zip([cl1, cl2, cl3], CLUSTER_NAMES.items()):
+                    sub = df_c[df_c["cluster"] == cid]
+                    if sub.empty:
+                        continue
+                    dom_rarity = sub["rarity"].dropna().mode()
+                    dom_rarity = dom_rarity.iloc[0] if not dom_rarity.empty else "N/A"
+                    pct_holo   = sub["is_holo"].mean() * 100
+                    with col:
+                        st.markdown(f"""
+                        <div style="background:linear-gradient(135deg,{CLUSTER_COLORS[cid]}22,{DARK2});
+                                    border:2px solid {CLUSTER_COLORS[cid]}; border-radius:14px;
+                                    padding:20px; box-shadow:0 4px 14px rgba(0,0,0,0.3);">
+                            <div style="font-size:2rem; margin-bottom:8px;">{CLUSTER_EMOJIS[cid]}</div>
+                            <div style="color:{CLUSTER_COLORS[cid]}; font-weight:800; font-size:1rem; margin-bottom:12px;">
+                                {cname}
                             </div>
-                            """, unsafe_allow_html=True)
-                    except Exception as exc:
-                        st.error(f"Erreur KMeans : {exc}")
-                else:
-                    st.info("Modèle KMeans non chargé.")
+                            <div style="color:{WHITE}; font-size:0.85rem; line-height:1.8;">
+                                🃏 <strong>{len(sub):,}</strong> cartes<br>
+                                💰 Prix moyen : <strong>${sub['market_price'].mean():.2f}</strong><br>
+                                📊 Prix médian : <strong>${sub['market_price'].median():.2f}</strong><br>
+                                ⭐ Rareté dom. : <strong>{dom_rarity}</strong><br>
+                                ✨ % Holo : <strong>{pct_holo:.0f}%</strong>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            except Exception as exc:
+                st.error(f"Erreur lors du calcul des clusters : {exc}")
+        else:
+            st.info("Modèle KMeans non chargé.")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
