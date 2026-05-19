@@ -8,16 +8,12 @@ from sklearn.model_selection import train_test_split
 from config import DATA_DIR
 
 FEATURE_COLS = [
-    # Conditions environnementales
-    "lum", "atm", "col",
+    # Conditions environnementales (observables / planifiables par Vinci)
+    "lum", "atm",
     # Infrastructure routière
     "circ", "nbv", "prof", "surf", "infra", "situ", "vma",
-    # Véhicule
-    "catv",
-    # Temporel
-    "mois", "jour", "heure", "saison",
-    # Usager
-    "catu", "sexe", "age", "secu",
+    # Temporel / saisonnalité
+    "mois", "jour", "saison",
 ]
 
 

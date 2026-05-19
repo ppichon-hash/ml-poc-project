@@ -1,4 +1,4 @@
-"""Matmut — Prédiction des accidents graves. Streamlit app."""
+"""Vinci Autoroutes — Prédiction des accidents graves. Streamlit app."""
 from __future__ import annotations
 
 import sys
@@ -17,16 +17,16 @@ import streamlit as st
 
 from config import DATA_DIR, MODEL_METRICS_FILE, MODELS_DIR
 
-# ── Palette Matmut ────────────────────────────────────────────────────────────
-NAVY   = "#CC0000"
+# ── Palette Vinci Autoroutes ───────────────────────────────────────────────────
+NAVY   = "#003087"
 ORANGE = "#FF6B00"
 WHITE  = "#FFFFFF"
-LIGHT  = "#FFF6F6"
+LIGHT  = "#F4F6FA"
 DARK   = "#0A1628"
-DARK2  = "#7A0000"
+DARK2  = "#0D1F3C"
 GREY   = "#6B7280"
 GREEN  = "#10B981"
-RED    = "#D32027"
+RED    = "#EF4444"
 YELLOW = "#F59E0B"
 
 # ── Codes BAAC → labels lisibles ─────────────────────────────────────────────
@@ -55,22 +55,20 @@ MOIS_LABELS = {1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: 
                7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"}
 
 FEATURE_COLS = [
-    "lum", "atm", "col", "circ", "nbv", "prof",
-    "surf", "infra", "situ", "vma", "catv",
-    "mois", "jour", "heure", "saison",
-    "catu", "sexe", "age", "secu",
+    # Features environnementales — observables / planifiables par Vinci
+    "lum", "atm",
+    # Infrastructure routière
+    "circ", "nbv", "prof", "surf", "infra", "situ", "vma",
+    # Temporel / saisonnalité
+    "mois", "jour", "saison",
 ]
 FEATURE_LABELS = {
-    "lum": "Luminosité", "atm": "Météo", "col": "Type de collision",
+    "lum": "Luminosité", "atm": "Météo",
     "circ": "Régime circulation", "nbv": "Nb de voies", "prof": "Profil de la route",
     "surf": "État de surface", "infra": "Infrastructure", "situ": "Situation",
-    "vma": "Vitesse max (km/h)", "catv": "Type de véhicule",
-    "mois": "Mois", "jour": "Jour du mois", "heure": "Heure", "saison": "Saison",
-    "catu": "Catégorie usager", "sexe": "Sexe", "age": "Âge", "secu": "Ceinture portée",
+    "vma": "Vitesse max (km/h)",
+    "mois": "Mois", "jour": "Jour du mois", "saison": "Saison",
 }
-SEXE_LABELS = {1: "Masculin", 2: "Féminin"}
-CATU_LABELS = {1: "Conducteur", 2: "Passager"}
-SECU_LABELS = {1: "Oui — ceinture portée", 0: "Non — sans ceinture"}
 
 CLUSTER_NAMES  = {0: "Accidents mineurs", 1: "Accidents modérés", 2: "Accidents graves"}
 CLUSTER_COLORS = {0: GREEN, 1: YELLOW, 2: RED}
@@ -249,7 +247,7 @@ def _info_card(emoji: str, title: str, body: str, border: str = NAVY) -> str:
     </div>"""
 
 
-# ── Page 1 — Contexte Matmut ──────────────────────────────────────────────────
+# ── Page 1 — Contexte Vinci ──────────────────────────────────────────────────
 
 def page_contexte(df: pd.DataFrame) -> None:
     st.markdown(f"""
@@ -260,9 +258,7 @@ def page_contexte(df: pd.DataFrame) -> None:
         border: 1px solid rgba(255,107,0,0.4);
     ">
         <div style="font-size:3.5rem; margin-bottom:16px;">🛣️</div>
-        <h1 style="font-size:2.4rem; color:{WHITE} !important; margin:0; font-weight:900;">
-            Matmut
-        </h1>
+        <h1 style="font-size:2.4rem; color:{WHITE} !important; margin:0; font-weight:900;"> Vinci Autoroutes </h1>
         <h2 style="font-size:1.3rem; color:{ORANGE} !important; margin:10px 0 16px; font-weight:700;">
             Prédiction des accidents graves
         </h2>
@@ -326,7 +322,7 @@ def page_contexte(df: pd.DataFrame) -> None:
         st.markdown(_info_card(
             "🚨", "Prédiction en temps réel",
             "Renseignez les conditions de l'accident (météo, luminosité, type de véhicule…) "
-            "et obtenez une évaluation du risque avec recommandation d'intervention Matmut.",
+            "et obtenez une évaluation du risque avec recommandation d'intervention Vinci.",
             ORANGE,
         ), unsafe_allow_html=True)
     with col3:
@@ -371,7 +367,7 @@ def page_contexte(df: pd.DataFrame) -> None:
 # ── Page 2 — Dashboard accidents ──────────────────────────────────────────────
 
 def page_dashboard(df: pd.DataFrame) -> None:
-    _banner("📊 Dashboard accidents autoroutes", "Analyse des accidents corporels sur le réseau Matmut (2020–2024)")
+    _banner("📊 Dashboard accidents autoroutes", "Analyse des accidents corporels sur le réseau Vinci (2020–2024)")
 
     # ── Filtres ──────────────────────────────────────────────────────────────
     with st.expander("🔽 Filtres", expanded=True):
@@ -602,7 +598,7 @@ def page_dashboard(df: pd.DataFrame) -> None:
 # ── Page 3 — Prédiction gravité ───────────────────────────────────────────────
 
 def page_prediction(df: pd.DataFrame, models: dict) -> None:
-    _banner("🚨 Prédiction de la gravité", "Évaluez le risque et recevez une recommandation d'intervention Matmut")
+    _banner("🚨 Prédiction de la gravité", "Évaluez le risque et recevez une recommandation d'intervention Vinci")
 
     if "rf" not in models and "xgb" not in models:
         st.error("Modèles non chargés. Lancez `python scripts/train_models.py` d'abord.")
@@ -611,64 +607,48 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
     # Médianes pour les features non saisies
     medians = {col: float(df[col].median()) for col in FEATURE_COLS if col in df.columns}
 
-    st.markdown("<h3>Conditions de l'accident</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>Conditions environnementales</h3>", unsafe_allow_html=True)
 
-    # ── Ligne 1 : Conditions routières ────────────────────────────────────────
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
             f"<div style='background:{WHITE}; border:1px solid #E5E7EB; border-radius:12px; padding:20px;'>"
-            f"<p style='font-weight:700; color:{NAVY}; margin-bottom:12px;'>🛣️ Conditions routières</p>",
+            f"<p style='font-weight:700; color:{NAVY}; margin-bottom:12px;'>🌦️ Météo & Visibilité</p>",
             unsafe_allow_html=True)
         lum_choice  = st.selectbox("☀️ Luminosité",
                                     options=list(LUM_LABELS.keys()),
                                     format_func=lambda k: LUM_LABELS[k])
-        atm_choice  = st.selectbox("🌧️ Météo",
+        atm_choice  = st.selectbox("🌧️ Conditions météo",
                                     options=list(ATM_LABELS.keys()),
                                     format_func=lambda k: ATM_LABELS[k])
-        surf_choice = st.selectbox("🛣️ État de surface",
+        surf_choice = st.selectbox("🛣️ État de la chaussée",
                                     options=list(SURF_LABELS.keys()),
                                     format_func=lambda k: SURF_LABELS[k])
-        col_choice  = st.selectbox("💥 Type de collision",
-                                    options=list(COL_LABELS.keys()),
-                                    format_func=lambda k: COL_LABELS[k])
+        mois_choice = st.selectbox("📅 Mois",
+                                    options=list(MOIS_LABELS.keys()),
+                                    format_func=lambda k: MOIS_LABELS[k])
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c2:
         st.markdown(
             f"<div style='background:{WHITE}; border:1px solid #E5E7EB; border-radius:12px; padding:20px;'>"
-            f"<p style='font-weight:700; color:{NAVY}; margin-bottom:12px;'>🏗️ Véhicule & Infrastructure</p>",
+            f"<p style='font-weight:700; color:{NAVY}; margin-bottom:12px;'>🏗️ Infrastructure routière</p>",
             unsafe_allow_html=True)
-        catv_choice  = st.selectbox("🚗 Type de véhicule",
-                                     options=list(CATV_LABELS.keys()),
-                                     format_func=lambda k: CATV_LABELS[k])
         infra_choice = st.selectbox("🏗️ Type d'infrastructure",
                                      options=list(INFRA_LABELS.keys()),
                                      format_func=lambda k: INFRA_LABELS[k])
-        mois_choice  = st.selectbox("📅 Mois",
-                                     options=list(MOIS_LABELS.keys()),
-                                     format_func=lambda k: MOIS_LABELS[k])
-        heure_choice = st.slider("🕐 Heure de l'accident", min_value=0, max_value=23, value=14,
-                                  format="%dh")
+        CIRC_LABELS = {1: "Sens unique", 2: "Bidirectionnel", 3: "Voies séparées", 4: "Variable"}
+        circ_choice = st.selectbox("🔄 Régime de circulation",
+                                    options=list(CIRC_LABELS.keys()),
+                                    format_func=lambda k: CIRC_LABELS[k])
+        nbv_choice  = st.slider("🛣️ Nombre de voies", min_value=1, max_value=6, value=2)
+        PROF_LABELS = {1: "Plat", 2: "Pente", 3: "Sommet de côte", 4: "Bas de côte"}
+        prof_choice = st.selectbox("📐 Profil de la route",
+                                    options=list(PROF_LABELS.keys()),
+                                    format_func=lambda k: PROF_LABELS[k])
+        vma_choice  = st.selectbox("🚀 Vitesse max autorisée (km/h)",
+                                    options=[70, 80, 90, 110, 130], index=4)
         st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── Ligne 2 : Profil de l'usager ─────────────────────────────────────────
-    st.markdown(f"<h3 style='margin-top:20px;'>Profil de l'usager</h3>", unsafe_allow_html=True)
-    cu1, cu2, cu3, cu4 = st.columns(4)
-    with cu1:
-        sexe_choice = st.selectbox("👤 Sexe",
-                                    options=list(SEXE_LABELS.keys()),
-                                    format_func=lambda k: SEXE_LABELS[k])
-    with cu2:
-        age_choice = st.number_input("🎂 Âge", min_value=16, max_value=100, value=40, step=1)
-    with cu3:
-        catu_choice = st.selectbox("🚘 Rôle dans le véhicule",
-                                    options=list(CATU_LABELS.keys()),
-                                    format_func=lambda k: CATU_LABELS[k])
-    with cu4:
-        secu_choice = st.selectbox("🪖 Ceinture de sécurité",
-                                    options=list(SECU_LABELS.keys()),
-                                    format_func=lambda k: SECU_LABELS[k])
 
     # Calcul saison depuis mois
     saison_map = {12: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 2,
@@ -677,11 +657,11 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
 
     input_row = {col: medians.get(col, 0) for col in FEATURE_COLS}
     input_row.update({
-        "lum": lum_choice, "atm": atm_choice, "col": col_choice,
-        "surf": surf_choice, "catv": catv_choice, "infra": infra_choice,
-        "mois": mois_choice, "heure": float(heure_choice), "saison": saison_choice,
-        "sexe": sexe_choice, "age": float(age_choice),
-        "catu": catu_choice, "secu": float(secu_choice),
+        "lum": lum_choice, "atm": atm_choice,
+        "surf": surf_choice, "infra": infra_choice,
+        "circ": circ_choice, "nbv": float(nbv_choice),
+        "prof": prof_choice, "vma": float(vma_choice),
+        "mois": mois_choice, "saison": saison_choice,
     })
     input_df = pd.DataFrame([input_row])[FEATURE_COLS]
 
@@ -744,8 +724,8 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
             )
             st.plotly_chart(fig_gauge, use_container_width=True)
 
-            # Recommandation Matmut
-            with st.expander("📋 Recommandation Matmut"):
+            # Recommandation Vinci
+            with st.expander("📋 Recommandation Vinci"):
                 if prediction == 1:
                     st.markdown(f"""
                     <div style="background:#FEE2E2; border-left:5px solid {RED}; border-radius:8px; padding:18px;">
@@ -997,7 +977,7 @@ def page_comparaison(df: pd.DataFrame, models: dict) -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 PAGES = {
-    "🛣️ Contexte Matmut":        ("contexte",    page_contexte,    False),
+    "🛣️ Contexte Vinci":        ("contexte",    page_contexte,    False),
     "📊 Dashboard accidents":   ("dashboard",   page_dashboard,   False),
     "🚨 Prédiction gravité":    ("prediction",  page_prediction,  True),
     "⚖️ Comparaison modèles":   ("comparaison", page_comparaison, True),
@@ -1006,7 +986,7 @@ PAGES = {
 
 def build_app() -> None:
     st.set_page_config(
-        page_title="Matmut — IA Accidents",
+        page_title="Vinci Autoroutes — IA Accidents",
         page_icon="🛣️",
         layout="wide",
         initial_sidebar_state="expanded",
@@ -1020,9 +1000,7 @@ def build_app() -> None:
         st.markdown(f"""
         <div style="text-align:center; padding:28px 0 18px;">
             <div style="font-size:3rem;">🛣️</div>
-            <div style="color:{WHITE}; font-size:1.05rem; font-weight:900; margin-top:8px;">
-                Matmut
-            </div>
+            <div style="color:{WHITE}; font-size:1.05rem; font-weight:900; margin-top:8px;"> Vinci Autoroutes </div>
             <div style="color:rgba(255,255,255,0.6); font-size:0.75rem; margin-top:4px;">
                 Prédiction accidents graves
             </div>
