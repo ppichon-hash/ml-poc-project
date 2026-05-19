@@ -38,12 +38,17 @@ MODELS = {
     },
     "xgboost": {
         "name": "XGBoost",
-        "description": "Modèle supervisé boosté, plus performant sur données tabulaires.",
+        "description": "Gradient boosting optimisé — meilleur modèle supervisé.",
         "path": MODELS_DIR / "xgboost.joblib",
+    },
+    "lightgbm": {
+        "name": "LightGBM",
+        "description": "Gradient boosting Microsoft, très rapide sur données tabulaires.",
+        "path": MODELS_DIR / "lightgbm.joblib",
     },
     "kmeans": {
         "name": "KMeans",
-        "description": "Modèle non supervisé, identifie les profils d'accidents.",
+        "description": "Modèle non supervisé, identifie les profils d'assurés.",
         "path": MODELS_DIR / "kmeans.joblib",
     },
 }

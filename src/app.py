@@ -189,7 +189,8 @@ def load_data() -> pd.DataFrame:
 @st.cache_resource(show_spinner="Chargement des modèles…")
 def load_models() -> dict:
     models: dict = {}
-    for key, fname in [("rf", "random_forest.joblib"), ("xgb", "xgboost.joblib"), ("kmeans", "kmeans.joblib")]:
+    for key, fname in [("rf", "random_forest.joblib"), ("xgb", "xgboost.joblib"),
+                       ("lgbm", "lightgbm.joblib"), ("kmeans", "kmeans.joblib")]:
         p = MODELS_DIR / fname
         if p.exists():
             try:
@@ -606,7 +607,7 @@ def page_dashboard(df: pd.DataFrame) -> None:
 def page_prediction(df: pd.DataFrame, models: dict) -> None:
     _banner("🎯 Scoring de risque assuré", "Identifiez le niveau de risque d'accident grave d'un profil Matmut")
 
-    if "rf" not in models and "xgb" not in models:
+    if not any(k in models for k in ["rf", "xgb", "lgbm"]):
         st.error("Modèles non chargés. Lancez `python scripts/train_models.py` d'abord.")
         return
 
@@ -694,12 +695,14 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
 
     if clicked:
         try:
-            probas: list[float] = []
+            probas: dict[str, float] = {}
             if "xgb" in models:
-                probas.append(float(models["xgb"].predict_proba(input_df.astype(float))[0][1]))
+                probas["xgb"] = float(models["xgb"].predict_proba(input_df.astype(float))[0][1])
+            if "lgbm" in models:
+                probas["lgbm"] = float(models["lgbm"].predict_proba(input_df)[0][1])
             if "rf" in models:
-                probas.append(float(models["rf"].predict_proba(input_df)[0][1]))
-            avg_proba = float(np.mean(probas)) if probas else 0.5
+                probas["rf"] = float(models["rf"].predict_proba(input_df)[0][1])
+            avg_proba = float(np.mean(list(probas.values()))) if probas else 0.5
             prediction = int(avg_proba >= 0.5)
 
             st.markdown("<br>", unsafe_allow_html=True)
@@ -711,10 +714,11 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
                            f"(score de risque : {avg_proba*100:.1f}%)")
 
             if len(probas) > 1:
-                pm1, pm2, pm3 = st.columns(3)
-                pm1.metric("⚡ XGBoost",       f"{probas[0]*100:.1f}%", "Grave" if probas[0] >= 0.5 else "Léger")
-                pm2.metric("🌲 Random Forest",  f"{probas[1]*100:.1f}%", "Grave" if probas[1] >= 0.5 else "Léger")
-                pm3.metric("🤝 Consensus",      f"{avg_proba*100:.1f}%", "Grave" if prediction == 1 else "Léger")
+                metric_cols = st.columns(len(probas) + 1)
+                labels = {"xgb": "⚡ XGBoost", "lgbm": "🚀 LightGBM", "rf": "🌲 Random Forest"}
+                for col_w, (k, v) in zip(metric_cols, probas.items()):
+                    col_w.metric(labels.get(k, k), f"{v*100:.1f}%", "Grave" if v >= 0.5 else "Léger")
+                metric_cols[-1].metric("🤝 Consensus", f"{avg_proba*100:.1f}%", "Grave" if prediction == 1 else "Léger")
 
             st.markdown(
                 f"<p style='font-weight:600; margin-top:16px; color:{NAVY};'>Score de risque Matmut</p>",
@@ -922,24 +926,35 @@ def page_comparaison(df: pd.DataFrame, models: dict) -> None:
 
     # ── Tab 4 : Explications ─────────────────────────────────────────────────
     with t4:
-        rf_acc  = float(metrics_df[metrics_df["model_key"] == "random_forest"]["accuracy"].iloc[0]) * 100 if metrics_df is not None else 0
-        xgb_acc = float(metrics_df[metrics_df["model_key"] == "xgboost"]["accuracy"].iloc[0]) * 100 if metrics_df is not None else 0
-        km_acc  = float(metrics_df[metrics_df["model_key"] == "kmeans"]["accuracy"].iloc[0]) * 100 if metrics_df is not None else 0
+        def _get_acc(key: str) -> float:
+            if metrics_df is None: return 0.0
+            row = metrics_df[metrics_df["model_key"] == key]
+            return float(row["accuracy"].iloc[0]) * 100 if not row.empty else 0.0
+
+        rf_acc   = _get_acc("random_forest")
+        xgb_acc  = _get_acc("xgboost")
+        lgbm_acc = _get_acc("lightgbm")
+        km_acc   = _get_acc("kmeans")
 
         for emoji, name, acc, color, body in [
             ("🌲", "Random Forest", rf_acc, NAVY,
-             "Imaginez <strong>100 experts indépendants</strong> (les arbres) qui analysent chacun "
-             "les conditions de l'accident et votent. La décision finale est celle de la majorité.<br><br>"
+             "Imaginez <strong>200 experts indépendants</strong> (les arbres) qui analysent chacun "
+             "le profil de l'assuré et votent. La décision finale est celle de la majorité.<br><br>"
              "<strong>✅ Avantages :</strong> robuste, résistant au surapprentissage, feature importance lisible.<br>"
-             "<strong>⚠️ Limite :</strong> moins réactif sur des données très déséquilibrées."),
+             "<strong>⚠️ Limite :</strong> légèrement moins précis que les méthodes de boosting."),
             ("⚡", "XGBoost", xgb_acc, ORANGE,
              "XGBoost apprend de ses erreurs à chaque itération. Chaque nouvel arbre corrige "
              "les cas mal classés par le précédent — c'est le <strong>favori des compétitions ML</strong>.<br><br>"
-             "<strong>✅ Avantages :</strong> haute performance, gère bien les données déséquilibrées.<br>"
-             "<strong>⚠️ Limite :</strong> boîte noire, nécessite plus de réglage."),
+             "<strong>✅ Avantages :</strong> très haute performance, hyperparamètres optimisés par recherche.<br>"
+             "<strong>⚠️ Limite :</strong> boîte noire, nécessite un réglage fin."),
+            ("🚀", "LightGBM", lgbm_acc, "#00A651",
+             "Développé par Microsoft, LightGBM utilise une croissance d'arbres par feuilles "
+             "plutôt que par niveaux — <strong>plus rapide et souvent plus précis</strong> qu'XGBoost.<br><br>"
+             "<strong>✅ Avantages :</strong> très rapide, excellente gestion des données tabulaires, faible mémoire.<br>"
+             "<strong>⚠️ Limite :</strong> peut sur-apprendre sur petits datasets."),
             ("🔵", "KMeans (non supervisé)", km_acc, GREEN,
-             "KMeans regroupe automatiquement les accidents similaires <strong>SANS connaître leur gravité</strong>. "
-             "Il détecte 3 profils naturels d'accidents sur autoroute.<br><br>"
+             "KMeans regroupe automatiquement les profils similaires <strong>SANS connaître leur gravité</strong>. "
+             "Il détecte 3 segments naturels d'assurés sur autoroute.<br><br>"
              "<strong>✅ Avantages :</strong> non supervisé, découvre des patterns cachés.<br>"
              "<strong>⚠️ Limite :</strong> ne prédit pas directement, moins précis en classification."),
         ]:
