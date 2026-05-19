@@ -1,4 +1,4 @@
 model_key,model_name,model_path,accuracy,f1,precision,recall
-random_forest,Random Forest,C:\Users\pablo\Documents\ml-poc-project\models\random_forest.joblib,0.5252,0.5252,0.5252,0.5252
-xgboost,XGBoost,C:\Users\pablo\Documents\ml-poc-project\models\xgboost.joblib,0.5092,0.5069,0.5119,0.5092
+random_forest,Random Forest,C:\Users\pablo\Documents\ml-poc-project\models\random_forest.joblib,0.5246,0.5247,0.5247,0.5246
+xgboost,XGBoost,C:\Users\pablo\Documents\ml-poc-project\models\xgboost.joblib,0.5172,0.5125,0.5214,0.5172
 kmeans,KMeans,C:\Users\pablo\Documents\ml-poc-project\models\kmeans.joblib,0.5153,0.397,0.513,0.5153

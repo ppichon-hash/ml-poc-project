@@ -13,7 +13,7 @@ FEATURE_COLS = [
     # Infrastructure routière
     "circ", "nbv", "prof", "surf", "infra", "situ", "vma",
     # Temporel / saisonnalité
-    "mois", "jour", "saison",
+    "mois", "saison",
 ]
 
 

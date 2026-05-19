@@ -60,14 +60,14 @@ FEATURE_COLS = [
     # Infrastructure routière
     "circ", "nbv", "prof", "surf", "infra", "situ", "vma",
     # Temporel / saisonnalité
-    "mois", "jour", "saison",
+    "mois", "saison",
 ]
 FEATURE_LABELS = {
     "lum": "Luminosité", "atm": "Météo",
     "circ": "Régime circulation", "nbv": "Nb de voies", "prof": "Profil de la route",
     "surf": "État de surface", "infra": "Infrastructure", "situ": "Situation",
     "vma": "Vitesse max (km/h)",
-    "mois": "Mois", "jour": "Jour du mois", "saison": "Saison",
+    "mois": "Mois", "saison": "Saison",
 }
 
 CLUSTER_NAMES  = {0: "Accidents mineurs", 1: "Accidents modérés", 2: "Accidents graves"}
