@@ -1,30 +1,45 @@
-"""Student-owned dataset loading contract.
-
-Students must implement ``load_dataset_split`` so that ``scripts/main.py`` can
-evaluate every configured model on the same test split.
-"""
-
 from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
+import pandas as pd
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split
+
+from config import DATA_DIR
+
+# Colonnes utilisees par les modeles ML
+FEATURE_COLS = [
+    "rarity_encoded",
+    "set_age",
+    "price_range",
+    "is_holo",
+    "hp_normalized",
+    "has_evolution",
+    "is_reverse",
+    "nb_attacks",
+    "market_price",
+    "low_price",
+    "high_price",
+]
+
 
 def load_dataset_split() -> tuple[Any, Any, Any, Any]:
-    """Return the dataset split used for model evaluation.
+    df = pd.read_csv(DATA_DIR / "pokemon_cards.csv")
 
-    Expected return value:
-        A tuple ``(X_train, X_test, y_train, y_test)``.
+    # Garder uniquement les colonnes presentes dans le dataset
+    available = [c for c in FEATURE_COLS if c in df.columns]
+    X = df[available].copy()
+    y = df["target"]
 
-    Constraints:
-    - ``X_train`` and ``X_test`` must contain feature data in a format accepted
-      by the trained models stored in ``config.MODELS``.
-    - ``y_train`` and ``y_test`` must contain the corresponding targets.
-    - ``y_test`` must align with the predictions produced by each loaded model.
-
-    Typical choices for the return types are ``pandas.DataFrame`` /
-    ``pandas.Series`` or ``numpy.ndarray``.
-    """
-
-    raise NotImplementedError(
-        "Implement data.load_dataset_split() before running scripts/main.py."
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
     )
+
+    # Imputation des NaN par la mediane (fit sur train, transform sur les deux)
+    imputer = SimpleImputer(strategy="median")
+    X_train = pd.DataFrame(imputer.fit_transform(X_train), columns=X_train.columns)
+    X_test  = pd.DataFrame(imputer.transform(X_test),      columns=X_test.columns)
+
+    return X_train, X_test, y_train, y_test

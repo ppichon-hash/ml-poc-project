@@ -317,3 +317,6 @@ http-client.private.env.json
 
 # Exclude logs directory
 logs/*
+
+# Modèles ML (trop volumineux pour GitHub > 100 MB)
+models/*.joblib
