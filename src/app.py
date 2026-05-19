@@ -54,15 +54,23 @@ INFRA_LABELS = {
 MOIS_LABELS = {1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin",
                7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"}
 
-FEATURE_COLS = ["lum", "atm", "col", "circ", "nbv", "prof",
-                "surf", "infra", "situ", "vma", "catv", "mois", "jour"]
+FEATURE_COLS = [
+    "lum", "atm", "col", "circ", "nbv", "prof",
+    "surf", "infra", "situ", "vma", "catv",
+    "mois", "jour", "heure", "saison",
+    "catu", "sexe", "age", "secu",
+]
 FEATURE_LABELS = {
     "lum": "Luminosité", "atm": "Météo", "col": "Type de collision",
     "circ": "Régime circulation", "nbv": "Nb de voies", "prof": "Profil de la route",
     "surf": "État de surface", "infra": "Infrastructure", "situ": "Situation",
     "vma": "Vitesse max (km/h)", "catv": "Type de véhicule",
-    "mois": "Mois", "jour": "Jour du mois",
+    "mois": "Mois", "jour": "Jour du mois", "heure": "Heure", "saison": "Saison",
+    "catu": "Catégorie usager", "sexe": "Sexe", "age": "Âge", "secu": "Ceinture portée",
 }
+SEXE_LABELS = {1: "Masculin", 2: "Féminin"}
+CATU_LABELS = {1: "Conducteur", 2: "Passager"}
+SECU_LABELS = {1: "Oui — ceinture portée", 0: "Non — sans ceinture"}
 
 CLUSTER_NAMES  = {0: "Accidents mineurs", 1: "Accidents modérés", 2: "Accidents graves"}
 CLUSTER_COLORS = {0: GREEN, 1: YELLOW, 2: RED}
@@ -603,12 +611,14 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
     # Médianes pour les features non saisies
     medians = {col: float(df[col].median()) for col in FEATURE_COLS if col in df.columns}
 
-    st.markdown(f"<h3>Conditions de l'accident</h3>", unsafe_allow_html=True)
-    col_l, col_r = st.columns(2)
+    st.markdown("<h3>Conditions de l'accident</h3>", unsafe_allow_html=True)
 
-    with col_l:
+    # ── Ligne 1 : Conditions routières ────────────────────────────────────────
+    c1, c2 = st.columns(2)
+    with c1:
         st.markdown(
-            f"<div style='background:{WHITE}; border:1px solid #E5E7EB; border-radius:12px; padding:20px;'>",
+            f"<div style='background:{WHITE}; border:1px solid #E5E7EB; border-radius:12px; padding:20px;'>"
+            f"<p style='font-weight:700; color:{NAVY}; margin-bottom:12px;'>🛣️ Conditions routières</p>",
             unsafe_allow_html=True)
         lum_choice  = st.selectbox("☀️ Luminosité",
                                     options=list(LUM_LABELS.keys()),
@@ -616,37 +626,62 @@ def page_prediction(df: pd.DataFrame, models: dict) -> None:
         atm_choice  = st.selectbox("🌧️ Météo",
                                     options=list(ATM_LABELS.keys()),
                                     format_func=lambda k: ATM_LABELS[k])
-        col_choice  = st.selectbox("💥 Type de collision",
-                                    options=list(COL_LABELS.keys()),
-                                    format_func=lambda k: COL_LABELS[k])
         surf_choice = st.selectbox("🛣️ État de surface",
                                     options=list(SURF_LABELS.keys()),
                                     format_func=lambda k: SURF_LABELS[k])
+        col_choice  = st.selectbox("💥 Type de collision",
+                                    options=list(COL_LABELS.keys()),
+                                    format_func=lambda k: COL_LABELS[k])
         st.markdown("</div>", unsafe_allow_html=True)
 
-    with col_r:
+    with c2:
         st.markdown(
-            f"<div style='background:{WHITE}; border:1px solid #E5E7EB; border-radius:12px; padding:20px;'>",
+            f"<div style='background:{WHITE}; border:1px solid #E5E7EB; border-radius:12px; padding:20px;'>"
+            f"<p style='font-weight:700; color:{NAVY}; margin-bottom:12px;'>🏗️ Véhicule & Infrastructure</p>",
             unsafe_allow_html=True)
-        catv_choice = st.selectbox("🚗 Type de véhicule",
-                                    options=list(CATV_LABELS.keys()),
-                                    format_func=lambda k: CATV_LABELS[k])
+        catv_choice  = st.selectbox("🚗 Type de véhicule",
+                                     options=list(CATV_LABELS.keys()),
+                                     format_func=lambda k: CATV_LABELS[k])
         infra_choice = st.selectbox("🏗️ Type d'infrastructure",
                                      options=list(INFRA_LABELS.keys()),
                                      format_func=lambda k: INFRA_LABELS[k])
-        mois_choice = st.selectbox("📅 Mois",
-                                    options=list(MOIS_LABELS.keys()),
-                                    format_func=lambda k: MOIS_LABELS[k])
-        heure_choice = st.selectbox("🕐 Tranche horaire",
-                                     options=["Matin (6h–12h)", "Après-midi (12h–18h)",
-                                              "Soir (18h–23h)", "Nuit (23h–6h)"])
+        mois_choice  = st.selectbox("📅 Mois",
+                                     options=list(MOIS_LABELS.keys()),
+                                     format_func=lambda k: MOIS_LABELS[k])
+        heure_choice = st.slider("🕐 Heure de l'accident", min_value=0, max_value=23, value=14,
+                                  format="%dh")
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Ligne 2 : Profil de l'usager ─────────────────────────────────────────
+    st.markdown(f"<h3 style='margin-top:20px;'>Profil de l'usager</h3>", unsafe_allow_html=True)
+    cu1, cu2, cu3, cu4 = st.columns(4)
+    with cu1:
+        sexe_choice = st.selectbox("👤 Sexe",
+                                    options=list(SEXE_LABELS.keys()),
+                                    format_func=lambda k: SEXE_LABELS[k])
+    with cu2:
+        age_choice = st.number_input("🎂 Âge", min_value=16, max_value=100, value=40, step=1)
+    with cu3:
+        catu_choice = st.selectbox("🚘 Rôle dans le véhicule",
+                                    options=list(CATU_LABELS.keys()),
+                                    format_func=lambda k: CATU_LABELS[k])
+    with cu4:
+        secu_choice = st.selectbox("🪖 Ceinture de sécurité",
+                                    options=list(SECU_LABELS.keys()),
+                                    format_func=lambda k: SECU_LABELS[k])
+
+    # Calcul saison depuis mois
+    saison_map = {12: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 2,
+                  6: 3, 7: 3, 8: 3, 9: 4, 10: 4, 11: 4}
+    saison_choice = saison_map.get(mois_choice, 1)
 
     input_row = {col: medians.get(col, 0) for col in FEATURE_COLS}
     input_row.update({
         "lum": lum_choice, "atm": atm_choice, "col": col_choice,
         "surf": surf_choice, "catv": catv_choice, "infra": infra_choice,
-        "mois": mois_choice,
+        "mois": mois_choice, "heure": float(heure_choice), "saison": saison_choice,
+        "sexe": sexe_choice, "age": float(age_choice),
+        "catu": catu_choice, "secu": float(secu_choice),
     })
     input_df = pd.DataFrame([input_row])[FEATURE_COLS]
 

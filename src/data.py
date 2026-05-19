@@ -8,11 +8,16 @@ from sklearn.model_selection import train_test_split
 from config import DATA_DIR
 
 FEATURE_COLS = [
+    # Conditions environnementales
     "lum", "atm", "col",
-    "circ", "nbv", "prof",
-    "surf", "infra", "situ",
-    "vma", "catv",
-    "mois", "jour",
+    # Infrastructure routière
+    "circ", "nbv", "prof", "surf", "infra", "situ", "vma",
+    # Véhicule
+    "catv",
+    # Temporel
+    "mois", "jour", "heure", "saison",
+    # Usager
+    "catu", "sexe", "age", "secu",
 ]
 
 
