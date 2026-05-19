@@ -1,4 +1,4 @@
-"""Pokemon Card Investor — Streamlit application."""
+"""Vinci Autoroutes — Prédiction des accidents graves. Streamlit app."""
 from __future__ import annotations
 
 import sys
@@ -17,243 +17,192 @@ import streamlit as st
 
 from config import DATA_DIR, MODEL_METRICS_FILE, MODELS_DIR
 
-# ── Palette ───────────────────────────────────────────────────────────────────
+# ── Palette Vinci ─────────────────────────────────────────────────────────────
+NAVY   = "#003087"
+ORANGE = "#FF6B00"
+WHITE  = "#FFFFFF"
+LIGHT  = "#F4F6FA"
+DARK   = "#0A1628"
+DARK2  = "#0D1F3C"
+GREY   = "#6B7280"
+GREEN  = "#10B981"
+RED    = "#EF4444"
+YELLOW = "#F59E0B"
 
-RED    = "#E3350D"
-YELLOW = "#FFCB05"
-DARK   = "#1A1A2E"
-DARK2  = "#16213E"
-DARK3  = "#0F3460"
-WHITE  = "#F8F9FA"
-GREEN  = "#00B894"
-ORANGE = "#FDCB6E"
+# ── Codes BAAC → labels lisibles ─────────────────────────────────────────────
+LUM_LABELS  = {1: "Plein jour", 2: "Crépuscule/Aube", 3: "Nuit sans éclairage",
+               4: "Nuit - éclairage éteint", 5: "Nuit - éclairage allumé"}
+ATM_LABELS  = {1: "Normale", 2: "Pluie légère", 3: "Pluie forte", 4: "Neige/Grêle",
+               5: "Brouillard/Fumée", 6: "Vent fort/Tempête", 7: "Éblouissant", 8: "Couvert", 9: "Autre"}
+COL_LABELS  = {1: "Frontale", 2: "Par l'arrière", 3: "Côté", 4: "En chaîne",
+               5: "Multiples - autres", 6: "Sans collision"}
+SURF_LABELS = {1: "Normale", 2: "Mouillée", 3: "Flaques", 4: "Inondée",
+               5: "Enneigée", 6: "Boueuse", 7: "Verglacée", 8: "Corps gras/Huile", 9: "Autre"}
+CATV_LABELS = {1: "Vélo", 2: "Cyclomoteur", 3: "Voiturette", 7: "Voiture",
+               10: "Utilitaire léger", 13: "Poids lourd", 14: "Poids lourd + remorque",
+               15: "Tracteur routier", 17: "Autocar", 33: "Tramway", 37: "Voiture + remorque"}
+VMA_OPTIONS = [50, 70, 80, 90, 110, 130]
+MOIS_LABELS = {1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin",
+               7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"}
 
-# ── ML constants ──────────────────────────────────────────────────────────────
-
-FEATURE_COLS = [
-    "rarity_encoded", "set_age", "price_range", "is_holo",
-    "hp_normalized", "has_evolution", "is_reverse", "nb_attacks",
-    "market_price", "low_price", "high_price",
-]
-
+FEATURE_COLS = ["lum", "atm", "col", "circ", "nbv", "prof",
+                "surf", "infra", "situ", "vma", "catv", "mois", "jour"]
 FEATURE_LABELS = {
-    "rarity_encoded": "Rareté",
-    "set_age":        "Âge du set (ans)",
-    "price_range":    "Écart de prix ($)",
-    "is_holo":        "Holographique",
-    "hp_normalized":  "HP normalisé",
-    "has_evolution":  "A une évolution",
-    "is_reverse":     "Reverse Holo",
-    "nb_attacks":     "Nb d'attaques",
-    "market_price":   "Prix marché ($)",
-    "low_price":      "Prix bas ($)",
-    "high_price":     "Prix haut ($)",
+    "lum": "Luminosité", "atm": "Météo", "col": "Type de collision",
+    "circ": "Régime circulation", "nbv": "Nb de voies", "prof": "Profil de la route",
+    "surf": "État de surface", "infra": "Infrastructure", "situ": "Situation",
+    "vma": "Vitesse max (km/h)", "catv": "Type de véhicule",
+    "mois": "Mois", "jour": "Jour du mois",
 }
 
-FEATURE_EXPLAIN = {
-    "market_price":  ("Plus le prix actuel est élevé, plus la carte a une cote reconnue.",       lambda v: f"${v:.2f}"),
-    "price_range":   ("Un grand écart prix bas/haut signale une forte volatilité.",               lambda v: f"${v:.2f}"),
-    "low_price":     ("Prix plancher constaté sur le marché.",                                    lambda v: f"${v:.2f}"),
-    "high_price":    ("Prix plafond constaté sur le marché.",                                     lambda v: f"${v:.2f}"),
-    "set_age":       ("Les sets anciens ont eu le temps de se valoriser.",                        lambda v: f"{int(v)} ans"),
-    "rarity_encoded":("Plus la rareté est élevée, plus la carte est convoitée des collectionneurs.", lambda v: f"{int(v)}/6"),
-    "hp_normalized": ("Les cartes puissantes attirent les joueurs compétitifs.",                  lambda v: f"{v*100:.0f}%"),
-    "is_holo":       ("Les cartes holographiques se distinguent visuellement et sont plus rares.", lambda v: "Oui" if v else "Non"),
-    "is_reverse":    ("Le reverse holo ajoute une variante rare à la carte.",                     lambda v: "Oui" if v else "Non"),
-    "has_evolution": ("Les cartes évoluées sont souvent jouées dans les decks compétitifs.",      lambda v: "Oui" if v else "Non"),
-    "nb_attacks":    ("Plus d'attaques signifie plus de polyvalence tactique.",                   lambda v: str(int(v))),
-}
-
-RARITY_SIMPLIFIED_ORDER = ["Common", "Uncommon", "Rare", "Holo Rare", "Ultra Rare", "Secret Rare"]
-RARITY_ENCODED_MAP      = {r: i + 1 for i, r in enumerate(RARITY_SIMPLIFIED_ORDER)}
-RARITY_COLORS_MAP = {
-    "Common":      "#74b9ff",
-    "Uncommon":    "#a29bfe",
-    "Rare":        "#6c5ce7",
-    "Holo Rare":   YELLOW,
-    "Ultra Rare":  ORANGE,
-    "Secret Rare": RED,
-    "Other":       "#b2bec3",
-}
-
-CLUSTER_NAMES  = {0: "Cartes communes", 1: "Cartes rares", 2: "Cartes collector"}
-CLUSTER_COLORS = {0: "#74b9ff", 1: YELLOW, 2: RED}
-CLUSTER_EMOJIS = {0: "🃏", 1: "⭐", 2: "💎"}
-
-POKEMON_TYPES = [
-    "Fire", "Water", "Grass", "Lightning", "Psychic",
-    "Fighting", "Darkness", "Metal", "Dragon", "Colorless", "Fairy",
-]
+CLUSTER_NAMES  = {0: "Accidents mineurs", 1: "Accidents modérés", 2: "Accidents graves"}
+CLUSTER_COLORS = {0: GREEN, 1: YELLOW, 2: RED}
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
-
 _CSS = f"""
 <style>
-/* ── Base ── */
 [data-testid="stAppViewContainer"] {{
-    background-color: {DARK};
-    color: {WHITE};
+    background-color: {LIGHT};
+    color: {DARK};
 }}
-[data-testid="stHeader"] {{ background-color: {DARK}; }}
+[data-testid="stHeader"] {{ background-color: {NAVY}; }}
 
-/* ── Sidebar ── */
 [data-testid="stSidebar"] {{
-    background: linear-gradient(180deg, {DARK2} 0%, {DARK3} 100%);
-    border-right: 2px solid {RED};
+    background: linear-gradient(180deg, {NAVY} 0%, {DARK2} 100%);
+    border-right: 3px solid {ORANGE};
 }}
 [data-testid="stSidebar"] * {{ color: {WHITE} !important; }}
+[data-testid="stSidebar"] [data-baseweb="radio"] label {{
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 4px;
+    transition: background 0.2s;
+}}
+[data-testid="stSidebar"] [data-baseweb="radio"] label:hover {{
+    background: rgba(255,107,0,0.3);
+}}
 
-/* ── Metrics ── */
 [data-testid="metric-container"] {{
-    background: {DARK2};
-    border: 1px solid {DARK3};
-    border-left: 4px solid {RED};
+    background: {WHITE};
+    border: 1px solid #E5E7EB;
+    border-top: 4px solid {NAVY};
     border-radius: 12px;
-    padding: 14px 18px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    padding: 16px 20px;
+    box-shadow: 0 2px 8px rgba(0,48,135,0.10);
 }}
 [data-testid="stMetricValue"] {{
-    color: {YELLOW} !important;
-    font-size: 1.5rem !important;
+    color: {NAVY} !important;
+    font-size: 1.6rem !important;
     font-weight: 800 !important;
 }}
 [data-testid="stMetricLabel"] {{
-    color: {WHITE} !important;
+    color: {GREY} !important;
     font-weight: 500 !important;
-    font-size: 0.88rem !important;
 }}
-[data-testid="stMetricDelta"] svg {{ display: none; }}
 
-/* ── Buttons ── */
 .stButton > button {{
-    background: {RED} !important;
+    background: {ORANGE} !important;
     color: {WHITE} !important;
     border: none !important;
     border-radius: 10px !important;
     font-weight: 700 !important;
     font-size: 1rem !important;
-    padding: 0.65rem 1.6rem !important;
-    transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease !important;
-    letter-spacing: 0.3px !important;
+    padding: 0.7rem 2rem !important;
 }}
 .stButton > button:hover {{
-    background: {YELLOW} !important;
-    color: {DARK} !important;
-    box-shadow: 0 4px 18px rgba(255,203,5,0.45) !important;
+    background: {NAVY} !important;
+    box-shadow: 0 4px 16px rgba(0,48,135,0.35) !important;
 }}
 
-/* ── Titres avec dégradé ── */
-h1 {{
-    background: linear-gradient(90deg, {RED}, {YELLOW});
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    font-weight: 900 !important;
-}}
-h2 {{ color: {WHITE} !important; font-weight: 700 !important; }}
-h3 {{ color: {YELLOW} !important; font-weight: 600 !important; }}
+h1 {{ color: {NAVY} !important; font-weight: 900 !important; }}
+h2 {{ color: {NAVY} !important; font-weight: 700 !important; }}
+h3 {{ color: {ORANGE} !important; font-weight: 600 !important; }}
 
-/* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] {{
-    background: {DARK2};
+    background: {WHITE};
     border-radius: 10px;
     padding: 4px;
     gap: 4px;
+    border: 1px solid #E5E7EB;
 }}
 .stTabs [data-baseweb="tab"] {{
     background: transparent;
-    color: {WHITE};
+    color: {NAVY};
     border-radius: 8px;
     font-weight: 600;
-    padding: 6px 22px;
+    padding: 6px 20px;
 }}
 .stTabs [aria-selected="true"] {{
-    background: {RED} !important;
+    background: {NAVY} !important;
     color: {WHITE} !important;
 }}
 
-/* ── Inputs ── */
 .stSelectbox > div > div,
-.stTextInput > div > div > input,
 .stNumberInput > div > div > input {{
-    background: {DARK2} !important;
-    color: {WHITE} !important;
-    border-color: {DARK3} !important;
+    background: {WHITE} !important;
+    border-color: #D1D5DB !important;
     border-radius: 8px !important;
+    color: {DARK} !important;
 }}
-.stSlider [data-baseweb="slider"] div[role="slider"] {{
-    background: {RED} !important;
-}}
-.stCheckbox span[data-testid="stWidgetLabel"] {{ color: {WHITE} !important; }}
 
-/* ── Expander ── */
 [data-testid="stExpander"] {{
-    background: {DARK2};
-    border: 1px solid {DARK3};
+    background: {WHITE};
+    border: 1px solid #E5E7EB;
     border-radius: 12px;
 }}
 
-/* ── Dataframe ── */
-[data-testid="stDataFrame"] {{ border-radius: 12px; overflow: hidden; }}
-
-/* ── Alerts ── */
+hr {{ border-color: #E5E7EB !important; }}
 [data-testid="stAlert"] {{ border-radius: 12px !important; }}
-
-/* ── Progress ── */
-[data-testid="stProgress"] > div > div {{ background: {RED} !important; }}
-
-/* ── Divider ── */
-hr {{ border-color: {DARK3} !important; }}
 </style>
 """
 
+
 # ── Cache ─────────────────────────────────────────────────────────────────────
 
-@st.cache_data(show_spinner="Chargement des données Pokémon…")
+@st.cache_data(show_spinner="Chargement des données BAAC…")
 def load_data() -> pd.DataFrame:
-    try:
-        return pd.read_csv(DATA_DIR / "pokemon_cards.csv")
-    except FileNotFoundError:
-        st.error(f"Fichier introuvable : {DATA_DIR / 'pokemon_cards.csv'}. Lancez scripts/generate_data.py.")
+    path = DATA_DIR / "processed_dataset.csv"
+    if not path.exists():
+        st.error("Dataset introuvable. Lancez : python scripts/prepare_data.py")
         st.stop()
+    return pd.read_csv(path)
 
 
-@st.cache_resource(show_spinner="Chargement des modèles ML…")
+@st.cache_resource(show_spinner="Chargement des modèles…")
 def load_models() -> dict:
     models: dict = {}
     for key, fname in [("rf", "random_forest.joblib"), ("xgb", "xgboost.joblib"), ("kmeans", "kmeans.joblib")]:
         p = MODELS_DIR / fname
-        try:
-            if p.exists():
+        if p.exists():
+            try:
                 models[key] = joblib.load(p)
-        except Exception as exc:
-            st.warning(f"Impossible de charger {fname} : {exc}")
+            except Exception as exc:
+                st.warning(f"Impossible de charger {fname} : {exc}")
     return models
 
 
 @st.cache_data(show_spinner=False)
 def load_metrics() -> pd.DataFrame | None:
-    try:
-        if MODEL_METRICS_FILE.exists():
-            return pd.read_csv(MODEL_METRICS_FILE)
-    except Exception:
-        pass
+    if MODEL_METRICS_FILE.exists():
+        return pd.read_csv(MODEL_METRICS_FILE)
     return None
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _fig_layout(title: str = "", **kwargs) -> dict:
-    base: dict = dict(
-        paper_bgcolor=DARK2,
-        plot_bgcolor=DARK2,
-        font=dict(color=WHITE, family="sans-serif", size=12),
-        xaxis=dict(gridcolor="#2d3561", zerolinecolor="#2d3561", linecolor="#2d3561"),
-        yaxis=dict(gridcolor="#2d3561", zerolinecolor="#2d3561", linecolor="#2d3561"),
+    base = dict(
+        paper_bgcolor=WHITE,
+        plot_bgcolor=LIGHT,
+        font=dict(color=DARK, family="sans-serif", size=12),
+        xaxis=dict(gridcolor="#E5E7EB", zerolinecolor="#E5E7EB", linecolor="#D1D5DB"),
+        yaxis=dict(gridcolor="#E5E7EB", zerolinecolor="#E5E7EB", linecolor="#D1D5DB"),
         margin=dict(t=55, b=40, l=45, r=20),
-        legend=dict(bgcolor=DARK2, bordercolor=DARK3, borderwidth=1),
+        legend=dict(bgcolor=WHITE, bordercolor="#E5E7EB", borderwidth=1),
     )
     if title:
-        base["title"] = dict(text=title, font=dict(color=YELLOW, size=15))
+        base["title"] = dict(text=title, font=dict(color=NAVY, size=15))
     base.update(kwargs)
     return base
 
@@ -261,944 +210,800 @@ def _fig_layout(title: str = "", **kwargs) -> dict:
 def _banner(title: str, subtitle: str) -> None:
     st.markdown(f"""
     <div style="
-        background: linear-gradient(135deg, {RED} 0%, #8B0000 55%, {DARK2} 100%);
-        border-radius: 16px; padding: 30px 36px; margin-bottom: 28px;
-        border-left: 6px solid {YELLOW};
-        box-shadow: 0 6px 24px rgba(227,53,13,0.35);
+        background: linear-gradient(135deg, {NAVY} 0%, #005BAC 60%, {DARK2} 100%);
+        border-radius: 16px; padding: 28px 36px; margin-bottom: 24px;
+        border-left: 6px solid {ORANGE};
+        box-shadow: 0 6px 24px rgba(0,48,135,0.25);
     ">
-        <h1 style="
-            background: linear-gradient(90deg, {YELLOW}, #fff);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text; margin: 0; font-size: 2rem; font-weight: 900;
-        ">{title}</h1>
-        <p style="color:{WHITE}; margin:10px 0 0; font-size:1.05rem; opacity:0.88;">{subtitle}</p>
+        <h1 style="color:{WHITE} !important; margin:0; font-size:1.8rem;">{title}</h1>
+        <p style="color:rgba(255,255,255,0.85); margin:8px 0 0; font-size:1rem;">{subtitle}</p>
     </div>
     """, unsafe_allow_html=True)
 
 
-def _card_html(emoji: str, title: str, body: str, color: str = DARK3) -> str:
+def _info_card(emoji: str, title: str, body: str, border: str = NAVY) -> str:
     return f"""
-    <div style="
-        background: linear-gradient(135deg, {color}cc, {DARK2});
-        border: 1px solid {color}; border-radius: 14px; padding: 22px 20px;
-        height: 100%; box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-    ">
-        <div style="font-size:2.2rem; margin-bottom:10px;">{emoji}</div>
-        <div style="color:{YELLOW}; font-weight:800; font-size:1rem; margin-bottom:10px;">{title}</div>
-        <div style="color:{WHITE}; font-size:0.88rem; line-height:1.65;">{body}</div>
-    </div>
-    """
+    <div style="background:{WHITE}; border:1px solid #E5E7EB; border-top:4px solid {border};
+                border-radius:14px; padding:22px 20px; height:100%;
+                box-shadow:0 2px 8px rgba(0,48,135,0.08);">
+        <div style="font-size:2rem; margin-bottom:10px;">{emoji}</div>
+        <div style="color:{NAVY}; font-weight:800; font-size:1rem; margin-bottom:10px;">{title}</div>
+        <div style="color:{GREY}; font-size:0.88rem; line-height:1.65;">{body}</div>
+    </div>"""
 
 
-def _simplify_rarity(r) -> str:
-    if pd.isna(r):
-        return "Other"
-    s = str(r).lower()
-    if any(x in s for x in ("secret", "hyper", "rainbow", "shiny ultra", "mega hyper")):
-        return "Secret Rare"
-    if any(x in s for x in ("ultra", "illustration rare", "special illustration", "radiant")):
-        return "Ultra Rare"
-    if any(x in s for x in ("holo", "vmax", "vstar", "amazing", "prism", "break",
-                             "legend", "lv.x", "star", "prime", "ace spec", "double rare")):
-        return "Holo Rare"
-    if "rare" in s:
-        return "Rare"
-    if "uncommon" in s:
-        return "Uncommon"
-    if "common" in s:
-        return "Common"
-    return "Other"
+# ── Page 1 — Contexte Vinci ───────────────────────────────────────────────────
 
-
-def _simulate_price_history(
-    market_price: float,
-    low_price: float,
-    high_price: float,
-    rarity_encoded: int,
-    set_age: int,
-    release_date: str | None,
-) -> pd.DataFrame:
-    np.random.seed(int(market_price * 100) % 9999)
-
-    if rarity_encoded >= 5:
-        base_growth = 0.025 if set_age > 10 else 0.012
-    elif rarity_encoded >= 3:
-        base_growth = 0.012 if set_age > 5 else 0.005
-    else:
-        base_growth = 0.001
-
-    noise_scale = max(0.015, (high_price - low_price) / max(market_price, 0.01) * 0.2)
-
-    today = pd.Timestamp.today().normalize()
-    if release_date:
-        try:
-            start = pd.Timestamp(release_date)
-        except Exception:
-            start = today - pd.DateOffset(years=max(set_age, 1))
-    else:
-        start = today - pd.DateOffset(years=max(set_age, 1))
-
-    if start >= today:
-        start = today - pd.DateOffset(months=12)
-
-    dates = pd.date_range(start=start, end=today, freq="MS")
-    if len(dates) < 2:
-        dates = pd.date_range(start=start, periods=2, freq="MS")
-
-    n = len(dates)
-    start_price = max(market_price / ((1 + base_growth) ** n), low_price * 0.3, 0.01)
-
-    prices = [start_price]
-    for _ in range(n - 1):
-        noise = np.random.normal(0, noise_scale)
-        prices.append(max(low_price * 0.2, prices[-1] * (1 + base_growth + noise)))
-
-    if prices[-1] > 0:
-        scale  = market_price / prices[-1]
-        prices = [round(p * scale, 2) for p in prices]
-
-    return pd.DataFrame({"date": dates[: len(prices)], "prix": prices})
-
-
-# ── Page 1 — Accueil ──────────────────────────────────────────────────────────
-
-def page_accueil(df: pd.DataFrame) -> None:
+def page_contexte(df: pd.DataFrame) -> None:
     st.markdown(f"""
     <div style="
-        text-align:center; padding:48px 32px 38px;
-        background: linear-gradient(135deg, {DARK2} 0%, {DARK3} 50%, {DARK2} 100%);
-        border-radius: 20px; margin-bottom: 32px;
-        border: 1px solid {DARK3}; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        background: linear-gradient(135deg, {NAVY} 0%, #005BAC 50%, {DARK2} 100%);
+        border-radius: 20px; padding: 48px 40px; margin-bottom: 32px;
+        box-shadow: 0 8px 32px rgba(0,48,135,0.30);
+        border: 1px solid rgba(255,107,0,0.4);
     ">
-        <div style="font-size:4rem; margin-bottom:14px;">🎴</div>
-        <h1 style="
-            font-size:2.8rem; font-weight:900; margin:0;
-            background: linear-gradient(90deg, {RED}, {YELLOW});
-            -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-            background-clip:text;
-        ">Pokemon Card Investor</h1>
-        <p style="color:{WHITE}; font-size:1.15rem; margin-top:14px; opacity:0.85;">
-            Analysez, prédisez et optimisez vos investissements dans les cartes Pokémon
+        <div style="font-size:3.5rem; margin-bottom:16px;">🛣️</div>
+        <h1 style="font-size:2.4rem; color:{WHITE} !important; margin:0; font-weight:900;">
+            Vinci Autoroutes
+        </h1>
+        <h2 style="font-size:1.3rem; color:{ORANGE} !important; margin:10px 0 16px; font-weight:700;">
+            Prédiction des accidents graves
+        </h2>
+        <p style="color:rgba(255,255,255,0.85); font-size:1.05rem; max-width:680px; line-height:1.7; margin:0;">
+            Système d'aide à la décision basé sur le Machine Learning pour anticiper
+            la gravité des accidents sur le réseau autoroutier et optimiser le déploiement
+            des équipes d'intervention.
         </p>
-        <div style="margin-top:22px; display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
-            <span style="background:{RED}22; border:1px solid {RED}; border-radius:20px;
+        <div style="margin-top:24px; display:flex; gap:10px; flex-wrap:wrap;">
+            <span style="background:rgba(255,107,0,0.2); border:1px solid {ORANGE}; border-radius:20px;
                          padding:6px 16px; color:{WHITE}; font-size:0.85rem;">🤖 Machine Learning</span>
-            <span style="background:{YELLOW}22; border:1px solid {YELLOW}; border-radius:20px;
-                         padding:6px 16px; color:{WHITE}; font-size:0.85rem;">📊 {len(df):,} cartes analysées</span>
-            <span style="background:{DARK3}; border:1px solid {DARK3}; border-radius:20px;
-                         padding:6px 16px; color:{WHITE}; font-size:0.85rem;">🏆 3 modèles ML</span>
+            <span style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3);
+                         border-radius:20px; padding:6px 16px; color:{WHITE}; font-size:0.85rem;">
+                📊 {len(df['Num_Acc'].unique() if 'Num_Acc' in df.columns else df):,} accidents analysés</span>
+            <span style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3);
+                         border-radius:20px; padding:6px 16px; color:{WHITE}; font-size:0.85rem;">
+                📅 2020 – 2024</span>
+            <span style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3);
+                         border-radius:20px; padding:6px 16px; color:{WHITE}; font-size:0.85rem;">
+                🏆 3 modèles ML</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
+    n_acc = df["Num_Acc"].nunique() if "Num_Acc" in df.columns else len(df)
+    pct_grave = df["target"].mean() * 100
+
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🃏 Cartes analysées",  f"{len(df):,}")
-    c2.metric("📦 Sets différents",   df["set_name"].nunique())
-    c3.metric("💰 Prix moyen",         f"${df['market_price'].mean():.2f}")
-    c4.metric("📈 Cartes valorisées", f"{df['target'].mean()*100:.1f}%")
+    c1.metric("🚗 Usagers analysés",    f"{len(df):,}")
+    c2.metric("🚧 Accidents uniques",   f"{n_acc:,}")
+    c3.metric("⚠️ Accidents graves",    f"{pct_grave:.1f}%")
+    c4.metric("📅 Période couverte",    "2020 – 2024")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.info(
-        "**Comment utiliser cette app :**\n\n"
-        "- **📊 Dashboard** — explorez l'évolution des cotes, les tendances par rareté et les top cartes\n"
-        "- **🔮 Prédiction** — entrez les caractéristiques d'une carte et obtenez une prédiction ML instantanée\n"
-        "- **⚖️ Comparaison** — comparez les 3 modèles (Random Forest, XGBoost, KMeans) et leur performance"
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(f"<h2>Les 3 modules de l'application</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2>Objectif business</h2>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="background:{WHITE}; border:1px solid #E5E7EB; border-left:5px solid {ORANGE};
+                border-radius:12px; padding:24px 28px; margin-bottom:24px;
+                box-shadow:0 2px 8px rgba(0,48,135,0.08);">
+        <p style="color:{DARK}; font-size:1rem; line-height:1.8; margin:0;">
+            Vinci Autoroutes gère <strong style="color:{NAVY};">plus de 4 600 km d'autoroutes</strong> en France
+            et doit chaque jour décider du niveau d'intervention à déployer lors d'un accident.
+            Ce système prédit en temps réel si un accident est susceptible d'être
+            <strong style="color:{RED};">grave (hospitalisation ou décès)</strong>
+            ou <strong style="color:{GREEN};">léger (indemne ou blessé léger)</strong>,
+            permettant d'optimiser le déploiement des équipes de secours et de réduire les temps d'intervention.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown(_card_html(
-            "📊", "Dashboard des cotes",
-            "Recherchez une carte, visualisez l'évolution simulée de son prix depuis sa sortie, "
-            "explorez les tendances par rareté et type, et consultez les top valorisations.",
-            DARK3,
+        st.markdown(_info_card(
+            "📊", "Dashboard accidents",
+            "Visualisez la carte des accidents sur autoroutes avec leur gravité, "
+            "les tendances mensuelles, par météo, par luminosité et les zones à risque.",
+            NAVY,
         ), unsafe_allow_html=True)
     with col2:
-        st.markdown(_card_html(
-            "🔮", "Prédiction ML",
-            "Configurez les caractéristiques d'une carte et obtenez instantanément une prédiction "
-            "de valorisation par XGBoost avec niveau de confiance et explications des facteurs clés.",
-            "#1a3a2e",
+        st.markdown(_info_card(
+            "🚨", "Prédiction en temps réel",
+            "Renseignez les conditions de l'accident (météo, luminosité, type de véhicule…) "
+            "et obtenez une évaluation du risque avec recommandation d'intervention Vinci.",
+            ORANGE,
         ), unsafe_allow_html=True)
     with col3:
-        st.markdown(_card_html(
-            "⚖️", "Comparaison modèles",
-            "Comparez Random Forest, XGBoost et KMeans sur accuracy, F1-score, précision et recall. "
-            "Visualisez la feature importance et les 3 profils de cartes identifiés par KMeans.",
-            "#2a1a3e",
+        st.markdown(_info_card(
+            "⚖️", "Comparaison des modèles",
+            "Comparez Random Forest, XGBoost et KMeans : accuracy, F1-score, feature importance "
+            "et explication pédagogique de chaque algorithme.",
+            GREEN,
         ), unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(f"<h2>Aperçu du dataset</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2>Aperçu du dataset BAAC (autoroutes)</h2>", unsafe_allow_html=True)
 
     col_a, col_b = st.columns(2)
     with col_a:
-        rarity_counts = df["rarity"].apply(_simplify_rarity).value_counts()
-        rarity_counts = rarity_counts.reindex(RARITY_SIMPLIFIED_ORDER + ["Other"]).dropna()
+        by_year = df.groupby("annee")["target"].agg(["count", "mean"]).reset_index()
+        by_year.columns = ["Année", "Usagers", "Taux grave"]
         fig = px.bar(
-            x=rarity_counts.index, y=rarity_counts.values,
-            color=rarity_counts.index,
-            color_discrete_map=RARITY_COLORS_MAP,
-            labels={"x": "Rareté", "y": "Nb de cartes"},
-            title="Distribution par rareté",
+            by_year, x="Année", y="Usagers",
+            color="Taux grave",
+            color_continuous_scale=[GREEN, YELLOW, RED],
+            title="Usagers par année (autoroutes)",
+            labels={"Usagers": "Nb usagers", "Taux grave": "Taux gravité"},
         )
-        fig.update_layout(**_fig_layout(), showlegend=False)
+        fig.update_layout(**_fig_layout())
         st.plotly_chart(fig, use_container_width=True)
 
     with col_b:
         t_counts = df["target"].value_counts().sort_index()
         fig_d = px.pie(
             values=t_counts.values,
-            names=["❌ Ne se valorisera pas", "✅ Se valorisera"],
-            color_discrete_sequence=[DARK3, GREEN],
-            title="Objectif : cartes qui vont se valoriser",
+            names=["✅ Accident léger", "⚠️ Accident grave"],
+            color_discrete_sequence=[GREEN, RED],
+            title="Répartition des gravités",
             hole=0.52,
         )
-        fig_d.update_layout(**_fig_layout(), showlegend=True)
+        fig_d.update_layout(**_fig_layout())
         fig_d.update_traces(textfont_size=13)
         st.plotly_chart(fig_d, use_container_width=True)
 
 
-# ── Page 2 — Dashboard ────────────────────────────────────────────────────────
+# ── Page 2 — Dashboard accidents ──────────────────────────────────────────────
 
 def page_dashboard(df: pd.DataFrame) -> None:
-    _banner("📊 Dashboard des cotes", "Explorez les tendances du marché et l'évolution des prix")
+    _banner("📊 Dashboard accidents autoroutes", "Analyse des accidents corporels sur le réseau Vinci (2020–2024)")
 
-    # ── Section 1 : Recherche carte ──────────────────────────────────────────
-    st.markdown(f"<h3>🔍 Recherche d'une carte</h3>", unsafe_allow_html=True)
+    # ── Filtres ──────────────────────────────────────────────────────────────
+    with st.expander("🔽 Filtres", expanded=True):
+        fc1, fc2, fc3, fc4 = st.columns(4)
+        annees  = sorted(df["annee"].dropna().unique().astype(int)) if "annee" in df.columns else []
+        mois_l  = sorted(df["mois"].dropna().unique().astype(int)) if "mois" in df.columns else []
+        atm_l   = sorted(df["atm"].dropna().unique().astype(int)) if "atm" in df.columns else []
+        lum_l   = sorted(df["lum"].dropna().unique().astype(int)) if "lum" in df.columns else []
 
-    all_names   = sorted(df["name"].dropna().unique())
-    default_idx = all_names.index("Charizard") if "Charizard" in all_names else 0
-    chosen_name = st.selectbox("Choisissez un Pokémon", options=all_names, index=default_idx)
+        sel_annees = fc1.multiselect("Année", annees, default=annees)
+        sel_mois   = fc2.multiselect("Mois", mois_l, default=mois_l,
+                                      format_func=lambda m: MOIS_LABELS.get(int(m), str(m)))
+        sel_atm    = fc3.multiselect("Météo", atm_l, default=atm_l,
+                                      format_func=lambda a: ATM_LABELS.get(int(a), str(a)))
+        sel_lum    = fc4.multiselect("Luminosité", lum_l, default=lum_l,
+                                      format_func=lambda l: LUM_LABELS.get(int(l), str(l)))
 
-    matches = df[df["name"] == chosen_name].copy()
-    if matches.empty:
-        st.warning("Aucune carte trouvée.")
+    mask = pd.Series([True] * len(df), index=df.index)
+    if sel_annees and "annee" in df.columns:
+        mask &= df["annee"].isin(sel_annees)
+    if sel_mois and "mois" in df.columns:
+        mask &= df["mois"].isin(sel_mois)
+    if sel_atm and "atm" in df.columns:
+        mask &= df["atm"].isin(sel_atm)
+    if sel_lum and "lum" in df.columns:
+        mask &= df["lum"].isin(sel_lum)
+    dff = df[mask].copy()
+
+    if dff.empty:
+        st.warning("Aucun accident avec ces filtres.")
         return
 
-    if len(matches) > 1:
-        chosen_set = st.selectbox(f"{len(matches)} éditions disponibles — choisir un set :", matches["set_name"].tolist())
-        card = matches[matches["set_name"] == chosen_set].iloc[0]
-    else:
-        card = matches.iloc[0]
-
-    rarity_color = RARITY_COLORS_MAP.get(_simplify_rarity(card["rarity"]), DARK3)
-    rarity_label = card["rarity"] if not pd.isna(card["rarity"]) else "N/A"
-    holo_icon    = "✨" if card["is_holo"] else "🃏"
-
-    st.markdown(f"""
-    <div style="
-        background: linear-gradient(135deg, {rarity_color}22, {DARK2});
-        border: 2px solid {rarity_color}; border-radius: 14px;
-        padding: 22px 28px; margin: 14px 0;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-    ">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-                <h2 style="color:{YELLOW}; margin:0 0 5px;">{card['name']}</h2>
-                <p style="color:{WHITE}; opacity:0.8; margin:0;">
-                    {card['set_name']} &nbsp;•&nbsp; {int(card['year'])}
-                    &nbsp;•&nbsp; <span style="color:{rarity_color}; font-weight:700;">{rarity_label}</span>
-                </p>
-            </div>
-            <div style="font-size:2.8rem;">{holo_icon}</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    cc1, cc2, cc3, cc4, cc5 = st.columns(5)
-    cc1.metric("⭐ Rareté",  rarity_label)
-    cc2.metric("❤️ HP",      int(card["hp"]) if not pd.isna(card["hp"]) else "N/A")
-    cc3.metric("🔥 Type",    card["type"] if not pd.isna(card["type"]) else "N/A")
-    cc4.metric("✨ Holo",    "Oui" if card["is_holo"] else "Non")
-    cc5.metric("🔄 Reverse", "Oui" if card["is_reverse"] else "Non")
-
-    mc1, mc2, mc3 = st.columns(3)
-    mc1.metric("💰 Prix actuel", f"${card['market_price']:.2f}")
-    mc2.metric("📉 Prix bas",    f"${card['low_price']:.2f}")
-    mc3.metric("📈 Prix haut",   f"${card['high_price']:.2f}")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("📋 Usagers filtrés", f"{len(dff):,}")
+    m2.metric("🚧 Accidents",
+              f"{dff['Num_Acc'].nunique():,}" if "Num_Acc" in dff.columns else "N/A")
+    m3.metric("⚠️ Taux gravité", f"{dff['target'].mean()*100:.1f}%")
+    m4.metric("💀 Accidents graves",
+              f"{dff['target'].sum():,}")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Section 2 : Évolution simulée ────────────────────────────────────────
-    st.markdown(f"<h3>📈 Évolution simulée de la cote</h3>", unsafe_allow_html=True)
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🗺️ Carte", "📅 Évolution", "🌡️ Météo & Lumière", "🔥 Heatmap", "🏆 Top dép.", "🚗 Véhicules"
+    ])
 
-    try:
-        raw_rd   = card["set_release_date"] if "set_release_date" in card.index else None
-        rel_date = str(raw_rd) if raw_rd is not None and not pd.isna(raw_rd) else None
-        history  = _simulate_price_history(
-            float(card["market_price"]), float(card["low_price"]), float(card["high_price"]),
-            int(card["rarity_encoded"]), int(card["set_age"]), rel_date,
-        )
-        p0, p1  = history["prix"].iloc[0], history["prix"].iloc[-1]
-        var_pct = (p1 - p0) / max(p0, 0.01) * 100
-
-        is_up     = var_pct > 2
-        is_down   = var_pct < -2
-        trend_lbl = "📈 En hausse" if is_up else "📉 En baisse" if is_down else "➡️ Stable"
-        line_clr  = GREEN if is_up else RED if is_down else ORANGE
-        fill_clr  = ("rgba(0,184,148,0.1)" if is_up else
-                     "rgba(227,53,13,0.1)" if is_down else "rgba(253,203,110,0.1)")
-
-        ti1, ti2, ti3, ti4 = st.columns(4)
-        ti1.metric("Tendance",             trend_lbl)
-        ti2.metric("Prix initial estimé",  f"${p0:.2f}", f"{var_pct:+.1f}%")
-        ti3.metric("Min période",          f"${history['prix'].min():.2f}")
-        ti4.metric("Max période",          f"${history['prix'].max():.2f}")
-
-        fig_line = go.Figure()
-        fig_line.add_trace(go.Scatter(
-            x=history["date"], y=history["prix"],
-            mode="lines+markers",
-            line=dict(color=line_clr, width=3),
-            marker=dict(size=5, color=line_clr, line=dict(color=DARK2, width=1)),
-            fill="tozeroy", fillcolor=fill_clr,
-            hovertemplate="<b>%{x|%b %Y}</b><br>Prix : $%{y:.2f}<extra></extra>",
-        ))
-        fig_line.update_layout(
-            **_fig_layout(title=f"Évolution simulée — {card['name']} ({card['set_name']})"),
-            xaxis_title="Date", yaxis_title="Prix ($)", hovermode="x unified",
-        )
-        st.plotly_chart(fig_line, use_container_width=True)
-        st.caption("Note : évolution simulée à titre indicatif à partir des données de prix et de rareté.")
-    except Exception as exc:
-        st.error(f"Erreur lors du calcul de l'évolution : {exc}")
-
-    st.divider()
-
-    # ── Section 3 : Comparaison par rareté ───────────────────────────────────
-    st.markdown(f"<h3>🌈 Comparaison par rareté et type</h3>", unsafe_allow_html=True)
-
-    df_plot = df.copy()
-    df_plot["rarity_simple"] = df_plot["rarity"].apply(_simplify_rarity)
-
-    tab1, tab2, tab3 = st.tabs(["📦 Prix par rareté", "🔥 Prix par type", "🏆 Top 10 valorisées"])
-
+    # ── Onglet 1 : Carte Folium ──────────────────────────────────────────────
     with tab1:
-        q97 = df_plot["market_price"].quantile(0.97)
-        fig_box = px.box(
-            df_plot[df_plot["market_price"] < q97],
-            x="rarity_simple", y="market_price",
-            color="rarity_simple",
-            color_discrete_map=RARITY_COLORS_MAP,
-            category_orders={"rarity_simple": RARITY_SIMPLIFIED_ORDER + ["Other"]},
-            labels={"rarity_simple": "Rareté", "market_price": "Prix marché ($)"},
-            title="Distribution des prix par rareté (hors top 3%)",
-        )
-        fig_box.update_layout(**_fig_layout(), showlegend=False)
-        st.plotly_chart(fig_box, use_container_width=True)
+        has_coords = "lat" in dff.columns and "long" in dff.columns
+        if not has_coords:
+            st.info("Coordonnées GPS non disponibles dans ce dataset.")
+        else:
+            try:
+                import folium
+                from streamlit_folium import folium_static
 
+                geo = dff.dropna(subset=["lat", "long"]).copy()
+                geo = geo[(geo["lat"].between(42, 51)) & (geo["long"].between(-5, 8))]
+
+                # Échantillon de 2 000 points max pour la lisibilité
+                if len(geo) > 2000:
+                    geo = geo.sample(2000, random_state=42)
+
+                m = folium.Map(location=[46.8, 2.3], zoom_start=6,
+                               tiles="CartoDB positron")
+
+                for _, row in geo.iterrows():
+                    color = "red" if row["target"] == 1 else "green"
+                    folium.CircleMarker(
+                        location=[row["lat"], row["long"]],
+                        radius=4,
+                        color=color,
+                        fill=True,
+                        fill_opacity=0.7,
+                        popup=f"Gravité: {'Grave' if row['target']==1 else 'Léger'} | Année: {row.get('annee','')}",
+                    ).add_to(m)
+
+                st.caption(f"🔴 Accident grave  🟢 Accident léger  — {len(geo):,} points affichés")
+                folium_static(m, width=900, height=500)
+            except ImportError:
+                st.info("Installez `streamlit-folium` pour la carte interactive.")
+
+    # ── Onglet 2 : Évolution mensuelle ───────────────────────────────────────
     with tab2:
-        avg_type = (
-            df_plot.dropna(subset=["type"])
-            .groupby("type")["market_price"].mean()
-            .sort_values(ascending=False)
-            .reset_index()
-        )
-        avg_type.columns = ["Type", "Prix moyen ($)"]
-        fig_bar = px.bar(
-            avg_type, x="Prix moyen ($)", y="Type", orientation="h",
-            color="Prix moyen ($)",
-            color_continuous_scale=["#74b9ff", YELLOW, RED],
-            title="Prix moyen par type de carte",
-        )
-        fig_bar.update_layout(**_fig_layout(), showlegend=False, yaxis_categoryorder="total ascending")
-        st.plotly_chart(fig_bar, use_container_width=True)
+        if "annee" in dff.columns and "mois" in dff.columns:
+            evo = (dff.groupby(["annee", "mois"])
+                   .agg(nb=("target", "count"), graves=("target", "sum"))
+                   .reset_index())
+            evo["date"] = pd.to_datetime(dict(year=evo["annee"], month=evo["mois"], day=1))
+            evo["taux"] = evo["graves"] / evo["nb"] * 100
 
+            c1, c2 = st.columns(2)
+            with c1:
+                fig_evo = px.line(
+                    evo, x="date", y="nb", color="annee",
+                    title="Évolution mensuelle du nombre d'accidents",
+                    labels={"nb": "Nb usagers", "date": "Date", "annee": "Année"},
+                    color_discrete_sequence=px.colors.qualitative.Set2,
+                )
+                fig_evo.update_layout(**_fig_layout())
+                st.plotly_chart(fig_evo, use_container_width=True)
+
+            with c2:
+                fig_tx = px.line(
+                    evo, x="date", y="taux", color="annee",
+                    title="Taux de gravité mensuel (%)",
+                    labels={"taux": "Taux graves (%)", "date": "Date", "annee": "Année"},
+                    color_discrete_sequence=px.colors.qualitative.Set2,
+                )
+                fig_tx.update_traces(line_width=2)
+                fig_tx.update_layout(**_fig_layout())
+                st.plotly_chart(fig_tx, use_container_width=True)
+
+    # ── Onglet 3 : Météo & Luminosité ────────────────────────────────────────
     with tab3:
-        top10 = (
-            df_plot.nlargest(10, "market_price")[
-                ["name", "set_name", "rarity_simple", "type", "market_price"]
-            ].reset_index(drop=True)
-        )
-        top10.index += 1
-        fig_top = px.bar(
-            top10.reset_index(), x="market_price", y="name", orientation="h",
-            color="rarity_simple",
-            color_discrete_map=RARITY_COLORS_MAP,
-            labels={"market_price": "Prix ($)", "name": "Carte", "rarity_simple": "Rareté"},
-            title="Top 10 cartes par prix de marché",
-            hover_data=["set_name", "type"],
-        )
-        fig_top.update_layout(**_fig_layout(), yaxis_categoryorder="total ascending")
-        st.plotly_chart(fig_top, use_container_width=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            if "atm" in dff.columns:
+                atm_g = (dff.groupby("atm")["target"]
+                         .agg(nb="count", graves="sum").reset_index())
+                atm_g["label"] = atm_g["atm"].map(lambda x: ATM_LABELS.get(int(x), str(x)))
+                atm_g["taux"]  = atm_g["graves"] / atm_g["nb"] * 100
+                fig_atm = px.bar(
+                    atm_g.sort_values("taux", ascending=False),
+                    x="label", y="taux",
+                    color="taux",
+                    color_continuous_scale=[GREEN, YELLOW, RED],
+                    title="Taux de gravité par météo (%)",
+                    labels={"label": "Météo", "taux": "Taux graves (%)"},
+                )
+                fig_atm.update_layout(**_fig_layout(), showlegend=False, coloraxis_showscale=False)
+                st.plotly_chart(fig_atm, use_container_width=True)
 
-        display = top10[["name", "set_name", "rarity_simple", "market_price"]].copy()
-        display.columns = ["Carte", "Set", "Rareté", "Prix ($)"]
-        st.dataframe(
-            display.style.background_gradient(subset=["Prix ($)"], cmap="YlOrRd"),
-            use_container_width=True,
-        )
+        with c2:
+            if "lum" in dff.columns:
+                lum_g = (dff.groupby("lum")["target"]
+                         .agg(nb="count", graves="sum").reset_index())
+                lum_g["label"] = lum_g["lum"].map(lambda x: LUM_LABELS.get(int(x), str(x)))
+                lum_g["taux"]  = lum_g["graves"] / lum_g["nb"] * 100
+                fig_lum = px.bar(
+                    lum_g.sort_values("taux", ascending=False),
+                    x="label", y="taux",
+                    color="taux",
+                    color_continuous_scale=[GREEN, YELLOW, RED],
+                    title="Taux de gravité par luminosité (%)",
+                    labels={"label": "Luminosité", "taux": "Taux graves (%)"},
+                )
+                fig_lum.update_layout(**_fig_layout(), showlegend=False, coloraxis_showscale=False)
+                st.plotly_chart(fig_lum, use_container_width=True)
 
-    st.divider()
+    # ── Onglet 4 : Heatmap mois × jour ──────────────────────────────────────
+    with tab4:
+        if "mois" in dff.columns and "jour" in dff.columns:
+            heat = (dff.groupby(["mois", "jour"])["target"]
+                    .mean().reset_index()
+                    .pivot(index="mois", columns="jour", values="target"))
+            fig_h = go.Figure(go.Heatmap(
+                z=heat.values,
+                x=[str(int(c)) for c in heat.columns],
+                y=[MOIS_LABELS.get(int(r), str(r)) for r in heat.index],
+                colorscale=[[0, GREEN], [0.5, YELLOW], [1, RED]],
+                colorbar=dict(title="Taux gravité"),
+                hovertemplate="Mois: %{y}<br>Jour: %{x}<br>Taux grave: %{z:.1%}<extra></extra>",
+            ))
+            fig_h.update_layout(
+                **_fig_layout(title="Heatmap gravité : mois × jour du mois"),
+                height=450,
+            )
+            st.plotly_chart(fig_h, use_container_width=True)
 
-    # ── Section 4 : Stats globales ────────────────────────────────────────────
-    st.markdown(f"<h3>📊 Stats globales du dataset</h3>", unsafe_allow_html=True)
+    # ── Onglet 5 : Top départements ──────────────────────────────────────────
+    with tab5:
+        if "dep" in dff.columns:
+            top_dep = (dff.groupby("dep")["target"]
+                       .agg(nb="count", graves="sum")
+                       .reset_index())
+            top_dep["taux"] = top_dep["graves"] / top_dep["nb"] * 100
+            top10 = top_dep.nlargest(10, "graves").reset_index(drop=True)
+            top10["dep"] = top10["dep"].astype(str)
 
-    s1, s2, s3 = st.tabs(["🥧 Distribution rarétés", "🎯 Distribution target", "🔥 Corrélations"])
+            fig_dep = px.bar(
+                top10, x="graves", y="dep", orientation="h",
+                color="taux",
+                color_continuous_scale=[YELLOW, RED],
+                title="Top 10 départements — accidents graves sur autoroutes",
+                labels={"graves": "Nb accidents graves", "dep": "Département", "taux": "Taux (%)"},
+                text="graves",
+            )
+            fig_dep.update_layout(**_fig_layout(), yaxis_categoryorder="total ascending")
+            st.plotly_chart(fig_dep, use_container_width=True)
 
-    with s1:
-        rare_counts = df_plot["rarity_simple"].value_counts().reindex(RARITY_SIMPLIFIED_ORDER + ["Other"]).dropna()
-        fig_pie = px.pie(
-            values=rare_counts.values, names=rare_counts.index,
-            color=rare_counts.index,
-            color_discrete_map=RARITY_COLORS_MAP,
-            title="Répartition des cartes par rareté",
-        )
-        fig_pie.update_layout(**_fig_layout())
-        st.plotly_chart(fig_pie, use_container_width=True)
+    # ── Onglet 6 : Véhicules ─────────────────────────────────────────────────
+    with tab6:
+        if "catv" in dff.columns:
+            catv_g = (dff.groupby("catv")["target"]
+                      .agg(nb="count", graves="sum").reset_index())
+            catv_g["label"] = catv_g["catv"].map(
+                lambda x: CATV_LABELS.get(int(x), f"Code {int(x)}") if pd.notna(x) else "Inconnu"
+            )
+            catv_g["taux"] = catv_g["graves"] / catv_g["nb"] * 100
+            catv_g = catv_g[catv_g["nb"] >= 10].sort_values("nb", ascending=False).head(12)
 
-    with s2:
-        t_counts = df["target"].value_counts().sort_index()
-        fig_donut = px.pie(
-            values=t_counts.values,
-            names=["❌ Ne se valorisera pas", "✅ Se valorisera"],
-            color_discrete_sequence=[RED, GREEN],
-            title="Distribution de la target (variable à prédire)",
-            hole=0.5,
-        )
-        fig_donut.update_layout(**_fig_layout())
-        st.plotly_chart(fig_donut, use_container_width=True)
+            c1, c2 = st.columns(2)
+            with c1:
+                fig_cv = px.bar(
+                    catv_g, x="label", y="nb",
+                    color="taux",
+                    color_continuous_scale=[GREEN, YELLOW, RED],
+                    title="Accidents par type de véhicule",
+                    labels={"label": "Type", "nb": "Nb usagers"},
+                )
+                fig_cv.update_layout(**_fig_layout(), coloraxis_showscale=False)
+                st.plotly_chart(fig_cv, use_container_width=True)
 
-    with s3:
-        corr_cols = FEATURE_COLS + ["target"]
-        corr      = df[corr_cols].corr()
-        fig_heat  = go.Figure(go.Heatmap(
-            z=corr.values,
-            x=[FEATURE_LABELS.get(c, c) for c in corr.columns],
-            y=[FEATURE_LABELS.get(c, c) for c in corr.index],
-            colorscale=[[0, "#74b9ff"], [0.5, DARK3], [1, RED]],
-            zmid=0,
-            text=corr.values.round(2),
-            texttemplate="%{text}",
-            showscale=True,
-        ))
-        fig_heat.update_layout(
-            **_fig_layout(title="Corrélation entre les features et la target"),
-            height=500,
-        )
-        st.plotly_chart(fig_heat, use_container_width=True)
+            with c2:
+                fig_tx = px.bar(
+                    catv_g.sort_values("taux", ascending=False),
+                    x="label", y="taux",
+                    color="taux",
+                    color_continuous_scale=[GREEN, YELLOW, RED],
+                    title="Taux de gravité par type de véhicule (%)",
+                    labels={"label": "Type", "taux": "Taux graves (%)"},
+                )
+                fig_tx.update_layout(**_fig_layout(), coloraxis_showscale=False)
+                st.plotly_chart(fig_tx, use_container_width=True)
 
 
-# ── Page 3 — Prédiction ───────────────────────────────────────────────────────
+# ── Page 3 — Prédiction gravité ───────────────────────────────────────────────
 
 def page_prediction(df: pd.DataFrame, models: dict) -> None:
-    _banner("🔮 Prédiction du prix", "Configurez une carte et obtenez une prédiction ML instantanée")
+    _banner("🚨 Prédiction de la gravité", "Évaluez le risque et recevez une recommandation d'intervention Vinci")
 
-    if "xgb" not in models or "rf" not in models:
+    if "rf" not in models and "xgb" not in models:
         st.error("Modèles non chargés. Lancez `python scripts/train_models.py` d'abord.")
         return
 
-    st.markdown(f"<h3>Caractéristiques de la carte</h3>", unsafe_allow_html=True)
+    # Médianes pour les features non saisies
+    medians = {col: float(df[col].median()) for col in FEATURE_COLS if col in df.columns}
 
+    st.markdown(f"<h3>Conditions de l'accident</h3>", unsafe_allow_html=True)
     col_l, col_r = st.columns(2)
 
     with col_l:
         st.markdown(
-            f"<div style='background:{DARK2}; border:1px solid {DARK3}; border-radius:12px; padding:20px;'>",
-            unsafe_allow_html=True,
-        )
-        rarity      = st.selectbox("⭐ Rareté", RARITY_SIMPLIFIED_ORDER)
-        p_type      = st.selectbox("🔥 Type", POKEMON_TYPES)
-        hp          = st.number_input("❤️ HP", min_value=30, max_value=340, value=100, step=10)
-        set_names   = sorted(df["set_name"].dropna().unique())
-        chosen_set  = st.selectbox("📦 Extension", set_names)
+            f"<div style='background:{WHITE}; border:1px solid #E5E7EB; border-radius:12px; padding:20px;'>",
+            unsafe_allow_html=True)
+        lum_choice  = st.selectbox("☀️ Luminosité",
+                                    options=list(LUM_LABELS.keys()),
+                                    format_func=lambda k: LUM_LABELS[k])
+        atm_choice  = st.selectbox("🌧️ Météo",
+                                    options=list(ATM_LABELS.keys()),
+                                    format_func=lambda k: ATM_LABELS[k])
+        col_choice  = st.selectbox("💥 Type de collision",
+                                    options=list(COL_LABELS.keys()),
+                                    format_func=lambda k: COL_LABELS[k])
+        surf_choice = st.selectbox("🛣️ État de surface",
+                                    options=list(SURF_LABELS.keys()),
+                                    format_func=lambda k: SURF_LABELS[k])
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col_r:
         st.markdown(
-            f"<div style='background:{DARK2}; border:1px solid {DARK3}; border-radius:12px; padding:20px;'>",
-            unsafe_allow_html=True,
-        )
-        is_holo      = st.checkbox("✨ Carte Holographique ?")
-        is_reverse   = st.checkbox("🔄 Carte Reverse Holo ?")
-        has_evolution = st.checkbox("🔁 A une évolution ?", value=True)
-        nb_attacks   = st.number_input("⚔️ Nombre d'attaques", min_value=1, max_value=4, value=2)
-        set_year     = st.slider("📅 Année de sortie", min_value=1999, max_value=2025, value=2020)
+            f"<div style='background:{WHITE}; border:1px solid #E5E7EB; border-radius:12px; padding:20px;'>",
+            unsafe_allow_html=True)
+        catv_choice = st.selectbox("🚗 Type de véhicule",
+                                    options=list(CATV_LABELS.keys()),
+                                    format_func=lambda k: CATV_LABELS[k])
+        vma_choice  = st.selectbox("⚡ Vitesse max autorisée (km/h)",
+                                    options=VMA_OPTIONS, index=VMA_OPTIONS.index(130))
+        mois_choice = st.selectbox("📅 Mois",
+                                    options=list(MOIS_LABELS.keys()),
+                                    format_func=lambda k: MOIS_LABELS[k])
+        heure_choice = st.selectbox("🕐 Tranche horaire",
+                                     options=["Matin (6h–12h)", "Après-midi (12h–18h)",
+                                              "Soir (18h–23h)", "Nuit (23h–6h)"])
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Compute derived features
-    rarity_enc   = RARITY_ENCODED_MAP.get(rarity, 1)
-    set_age      = max(0, 2025 - set_year)
-    hp_norm      = round(hp / 340.0, 4)
-
-    # Estimate market price from the selected set's median
-    set_median   = float(df[df["set_name"] == chosen_set]["market_price"].median()) if chosen_set else 5.0
-    market_price = set_median
-    spread       = market_price * 0.15
-    low_price    = max(0.01, market_price - spread)
-    high_price   = market_price + spread
-    price_range  = round(high_price - low_price, 2)
-
-    input_df = pd.DataFrame([{
-        "rarity_encoded": rarity_enc,
-        "set_age":        set_age,
-        "price_range":    price_range,
-        "is_holo":        int(is_holo),
-        "hp_normalized":  hp_norm,
-        "has_evolution":  int(has_evolution),
-        "is_reverse":     int(is_reverse),
-        "nb_attacks":     nb_attacks,
-        "market_price":   market_price,
-        "low_price":      round(low_price, 2),
-        "high_price":     round(high_price, 2),
-    }])
+    input_row = {col: medians.get(col, 0) for col in FEATURE_COLS}
+    input_row.update({
+        "lum": lum_choice, "atm": atm_choice, "col": col_choice,
+        "surf": surf_choice, "catv": catv_choice, "vma": vma_choice,
+        "mois": mois_choice,
+    })
+    input_df = pd.DataFrame([input_row])[FEATURE_COLS]
 
     st.markdown("<br>", unsafe_allow_html=True)
-
     _, btn_col, _ = st.columns([1, 2, 1])
     with btn_col:
-        predict_clicked = st.button("🔮 Prédire la valorisation", type="primary", use_container_width=True)
+        clicked = st.button("🚨 Évaluer le risque", type="primary", use_container_width=True)
 
-    if predict_clicked:
+    if clicked:
         try:
-            xgb = models["xgb"]
-            rf  = models["rf"]
-
-            xgb_proba = xgb.predict_proba(input_df.astype(float))[0]
-            rf_proba  = rf.predict_proba(input_df)[0]
-            avg_proba = float((xgb_proba[1] + rf_proba[1]) / 2)
-            prediction = 1 if avg_proba >= 0.5 else 0
+            probas: list[float] = []
+            if "xgb" in models:
+                probas.append(float(models["xgb"].predict_proba(input_df.astype(float))[0][1]))
+            if "rf" in models:
+                probas.append(float(models["rf"].predict_proba(input_df)[0][1]))
+            avg_proba = float(np.mean(probas)) if probas else 0.5
+            prediction = int(avg_proba >= 0.5)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown(f"<h3>Résultat de la prédiction</h3>", unsafe_allow_html=True)
-
             if prediction == 1:
-                st.success(f"✅ **Cette carte devrait prendre de la valeur !**  Confiance : {avg_proba*100:.1f}%")
+                st.error(f"⚠️ **ACCIDENT GRAVE — Déployer équipe renforcée**  "
+                         f"(probabilité grave : {avg_proba*100:.1f}%)")
             else:
-                st.error(f"❌ **Cette carte ne devrait pas prendre de valeur** au-dessus de la moyenne.  Confiance : {(1-avg_proba)*100:.1f}%")
+                st.success(f"✅ **Accident léger — Intervention standard**  "
+                           f"(probabilité grave : {avg_proba*100:.1f}%)")
 
-            pct_int   = int(avg_proba * 100)
-            bar_color = GREEN if pct_int >= 70 else YELLOW if pct_int >= 50 else RED
-
-            mc1, mc2, mc3 = st.columns(3)
-            mc1.metric("⚡ XGBoost",       f"{xgb_proba[1]*100:.1f}%", "Valorisation" if xgb_proba[1] >= 0.5 else "Stable")
-            mc2.metric("🌲 Random Forest",  f"{rf_proba[1]*100:.1f}%",  "Valorisation" if rf_proba[1] >= 0.5 else "Stable")
-            mc3.metric("🤝 Consensus",       f"{avg_proba*100:.1f}%",   "Valorisation" if prediction == 1 else "Stable")
+            if len(probas) > 1:
+                pm1, pm2, pm3 = st.columns(3)
+                pm1.metric("⚡ XGBoost",       f"{probas[0]*100:.1f}%", "Grave" if probas[0] >= 0.5 else "Léger")
+                pm2.metric("🌲 Random Forest",  f"{probas[1]*100:.1f}%", "Grave" if probas[1] >= 0.5 else "Léger")
+                pm3.metric("🤝 Consensus",      f"{avg_proba*100:.1f}%", "Grave" if prediction == 1 else "Léger")
 
             st.markdown(
-                f"<p style='color:{WHITE}; font-weight:600; margin-top:16px;'>Probabilité de valorisation</p>",
-                unsafe_allow_html=True,
-            )
+                f"<p style='font-weight:600; margin-top:16px; color:{NAVY};'>Probabilité d'accident grave</p>",
+                unsafe_allow_html=True)
             st.progress(float(avg_proba))
-            st.markdown(f"""
-            <div style="display:flex; justify-content:space-between; margin-top:4px; margin-bottom:20px;">
-                <span style="color:{WHITE}; font-size:0.82rem;">0 % — Stable</span>
-                <span style="color:{bar_color}; font-weight:800; font-size:1.15rem;">{pct_int} %</span>
-                <span style="color:{WHITE}; font-size:0.82rem;">100 % — Valorisation sûre</span>
-            </div>
-            """, unsafe_allow_html=True)
 
+            # Gauge
+            bar_color = RED if avg_proba >= 0.6 else YELLOW if avg_proba >= 0.4 else GREEN
             fig_gauge = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=avg_proba * 100,
-                number=dict(suffix="%", font=dict(color=YELLOW, size=40)),
-                title=dict(text="Probabilité de valorisation", font=dict(color=WHITE, size=14)),
+                number=dict(suffix="%", font=dict(color=NAVY, size=40)),
+                title=dict(text="Probabilité de gravité", font=dict(color=DARK, size=14)),
                 gauge=dict(
-                    axis=dict(range=[0, 100], tickcolor=WHITE),
+                    axis=dict(range=[0, 100], tickcolor=DARK),
                     bar=dict(color=bar_color, thickness=0.3),
-                    bgcolor=DARK3,
+                    bgcolor=LIGHT,
                     steps=[
-                        dict(range=[0,  30], color="#3a1a1a"),
-                        dict(range=[30, 50], color="#3a2a1a"),
-                        dict(range=[50, 70], color="#1a2a2a"),
-                        dict(range=[70,100], color="#1a3a1a"),
+                        dict(range=[0, 30],  color="#D1FAE5"),
+                        dict(range=[30, 60], color="#FEF3C7"),
+                        dict(range=[60, 100], color="#FEE2E2"),
                     ],
-                    threshold=dict(line=dict(color=WHITE, width=3), thickness=0.85, value=50),
+                    threshold=dict(line=dict(color=NAVY, width=3), thickness=0.85, value=50),
                 ),
             ))
             fig_gauge.update_layout(
-                paper_bgcolor=DARK2, font=dict(color=WHITE), margin=dict(t=60, b=20), height=280,
+                paper_bgcolor=WHITE, font=dict(color=DARK),
+                margin=dict(t=60, b=20), height=280,
             )
             st.plotly_chart(fig_gauge, use_container_width=True)
 
-            # Pourquoi ? — top 3 features du RF
-            with st.expander("💡 Pourquoi cette prédiction ? Les 3 facteurs clés"):
-                importances = pd.Series(rf.feature_importances_, index=FEATURE_COLS).sort_values(ascending=False)
-                for feat, imp in importances.head(3).items():
-                    val   = float(input_df[feat].iloc[0])
-                    label = FEATURE_LABELS.get(feat, feat)
-                    expl_tuple = FEATURE_EXPLAIN.get(feat, ("", lambda v: str(v)))
-                    expl, fmt  = expl_tuple
-                    bar_w = min(int(imp * 600), 100)
+            # Recommandation Vinci
+            with st.expander("📋 Recommandation Vinci"):
+                if prediction == 1:
                     st.markdown(f"""
-                    <div style="background:{DARK2}; border:1px solid {DARK3}; border-radius:10px;
-                                padding:14px 18px; margin-bottom:10px;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-                            <span style="color:{YELLOW}; font-weight:700;">{label}</span>
-                            <span style="color:{WHITE}; font-weight:600;">{fmt(val)}</span>
-                        </div>
-                        <div style="background:{DARK3}; border-radius:4px; height:8px; margin-bottom:8px;">
-                            <div style="background:{RED}; border-radius:4px; height:8px; width:{bar_w}%;"></div>
-                        </div>
-                        <p style="color:{WHITE}; font-size:0.85rem; opacity:0.8; margin:0;">{expl}</p>
+                    <div style="background:#FEE2E2; border-left:5px solid {RED}; border-radius:8px; padding:18px;">
+                        <strong style="color:{RED};">NIVEAU D'INTERVENTION : ÉLEVÉ</strong><br><br>
+                        🚑 Déployer ambulance et équipe médicale<br>
+                        🚒 Alerter les pompiers<br>
+                        🚔 Sécurisation complète de la zone (3 km)<br>
+                        📡 Activer les panneaux d'information dynamiques<br>
+                        ⛔ Fermeture préventive des voies concernées<br>
+                        🚁 Évaluer la nécessité d'un hélitreuillage
                     </div>
                     """, unsafe_allow_html=True)
-
-            with st.expander("🔧 Features envoyées au modèle"):
-                disp = input_df.copy()
-                disp.columns = [FEATURE_LABELS.get(c, c) for c in disp.columns]
-                st.dataframe(disp, use_container_width=True, hide_index=True)
+                else:
+                    st.markdown(f"""
+                    <div style="background:#D1FAE5; border-left:5px solid {GREEN}; border-radius:8px; padding:18px;">
+                        <strong style="color:{GREEN};">NIVEAU D'INTERVENTION : STANDARD</strong><br><br>
+                        🚗 Patrouille autoroutière<br>
+                        🔸 Baliser la zone (500 m)<br>
+                        📞 Prévenir les secours de garde<br>
+                        ℹ️ Information PMV si nécessaire<br>
+                        🔄 Surveillance du trafic aval
+                    </div>
+                    """, unsafe_allow_html=True)
 
         except Exception as exc:
             st.error(f"Erreur lors de la prédiction : {exc}")
 
 
-# ── Page 4 — Comparaison ──────────────────────────────────────────────────────
+# ── Page 4 — Comparaison modèles ──────────────────────────────────────────────
 
 def page_comparaison(df: pd.DataFrame, models: dict) -> None:
-    _banner("⚖️ Comparaison des modèles ML", "Random Forest vs XGBoost vs KMeans — performances et explications")
+    _banner("⚖️ Comparaison des modèles ML",
+            "Random Forest vs XGBoost vs KMeans — performances et explications")
 
     metrics_df = load_metrics()
     METRIC_KEYS = ["accuracy", "f1", "precision", "recall"]
     METRIC_LBLS = ["Accuracy", "F1-score", "Précision", "Recall"]
-    MODEL_COLORS = [RED, YELLOW, "#74b9ff"]
+    MODEL_COLORS = [NAVY, ORANGE, GREEN]
 
     t1, t2, t3, t4 = st.tabs(["📊 Performances", "📈 Graphiques", "🔍 Feature Importance", "💡 Explications"])
 
-    # ── Tab 1 : Tableau des performances ─────────────────────────────────────
+    # ── Tab 1 : Tableau ──────────────────────────────────────────────────────
     with t1:
         if metrics_df is None:
-            st.info("Lancez `python scripts/main.py` pour générer les métriques.")
+            st.info("Lancez `python scripts/train_models.py` pour générer les métriques.")
         else:
-            # Garder uniquement les colonnes métriques utiles
-            cols_keep = ["model_key", "model_name"] + [k for k in METRIC_KEYS if k in metrics_df.columns]
-            mdf = metrics_df[cols_keep].copy()
+            mdf = metrics_df.copy()
             best_acc = mdf["accuracy"].max()
 
             for _, row in mdf.iterrows():
                 is_best    = abs(row["accuracy"] - best_acc) < 1e-9
-                border_col = YELLOW if is_best else DARK3
-                badge_html = (
-                    f"&nbsp;<span style='background:#1a3a1a; color:{GREEN}; border-radius:12px;"
-                    f" padding:3px 12px; font-size:0.78rem; font-weight:700;'>🏆 Meilleur modèle</span>"
-                    if is_best else ""
-                )
-                metric_blocks = ""
+                border_col = ORANGE if is_best else "#E5E7EB"
+                badge      = (f"&nbsp;<span style='background:#D1FAE5; color:{GREEN}; "
+                              f"border-radius:12px; padding:3px 12px; font-size:0.78rem; "
+                              f"font-weight:700;'>🏆 Meilleur modèle</span>" if is_best else "")
+
+                blocks = ""
                 for key, lbl in zip(METRIC_KEYS, METRIC_LBLS):
                     v   = float(row.get(key, 0)) * 100
-                    clr = GREEN if v >= 75 else ORANGE if v >= 60 else RED
-                    metric_blocks += f"""
-                    <div style="text-align:center; background:{DARK3}; border-radius:10px; padding:14px 8px;">
-                        <div style="color:{WHITE}; font-size:0.8rem; opacity:0.7; margin-bottom:6px;">{lbl}</div>
+                    clr = GREEN if v >= 70 else YELLOW if v >= 55 else RED
+                    blocks += f"""
+                    <div style="text-align:center; background:{LIGHT}; border-radius:10px; padding:14px 8px;">
+                        <div style="color:{GREY}; font-size:0.8rem; margin-bottom:6px;">{lbl}</div>
                         <div style="color:{clr}; font-size:1.5rem; font-weight:800;">{v:.1f}%</div>
                     </div>"""
 
                 st.markdown(f"""
-                <div style="background:{DARK2}; border:2px solid {border_col}; border-radius:14px;
-                            padding:22px 24px; margin-bottom:16px; box-shadow:0 3px 14px rgba(0,0,0,0.3);">
+                <div style="background:{WHITE}; border:2px solid {border_col}; border-radius:14px;
+                            padding:22px 24px; margin-bottom:16px;
+                            box-shadow:0 2px 8px rgba(0,48,135,0.08);">
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-                        <span style="color:{YELLOW}; font-size:1.2rem; font-weight:800;">
+                        <span style="color:{NAVY}; font-size:1.2rem; font-weight:800;">
                             {row.get('model_name', row['model_key'])}
-                        </span>
-                        {badge_html}
+                        </span>{badge}
                     </div>
                     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
-                        {metric_blocks}
+                        {blocks}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-    # ── Tab 2 : Graphiques ────────────────────────────────────────────────────
+    # ── Tab 2 : Graphiques ───────────────────────────────────────────────────
     with t2:
         if metrics_df is None:
-            st.info("Lancez `python scripts/main.py` pour générer les métriques.")
+            st.info("Lancez `python scripts/train_models.py` pour générer les métriques.")
         else:
-            cols_keep = ["model_key", "model_name"] + [k for k in METRIC_KEYS if k in metrics_df.columns]
-            mdf = metrics_df[cols_keep].copy()
-
-            # Bar chart groupé
+            mdf = metrics_df.copy()
             fig_bar = go.Figure()
             for i, (_, row) in enumerate(mdf.iterrows()):
                 vals = [float(row.get(k, 0)) for k in METRIC_KEYS]
                 fig_bar.add_trace(go.Bar(
                     name=row["model_name"],
-                    x=METRIC_LBLS,
-                    y=vals,
+                    x=METRIC_LBLS, y=vals,
                     marker_color=MODEL_COLORS[i % len(MODEL_COLORS)],
                     text=[f"{v*100:.1f}%" for v in vals],
                     textposition="outside",
-                    textfont=dict(size=11),
                 ))
             fig_bar.update_layout(
-                **_fig_layout(title="Comparaison des métriques par modèle"),
+                **_fig_layout(title="Comparaison des métriques"),
                 barmode="group",
-                legend=dict(bgcolor=DARK2, bordercolor=DARK3, borderwidth=1),
             )
             fig_bar.update_yaxes(range=[0, 1.12], tickformat=".0%")
             st.plotly_chart(fig_bar, use_container_width=True)
 
-            # Radar chart — layout polaire séparé (pas _fig_layout qui a xaxis/yaxis)
+            RADAR_FILLS = ["rgba(0,48,135,0.18)", "rgba(255,107,0,0.18)", "rgba(16,185,129,0.18)"]
             cats    = METRIC_LBLS + [METRIC_LBLS[0]]
             fig_rad = go.Figure()
             for i, (_, row) in enumerate(mdf.iterrows()):
                 vals = [float(row.get(k, 0)) for k in METRIC_KEYS]
                 fig_rad.add_trace(go.Scatterpolar(
-                    r=vals + [vals[0]],
-                    theta=cats,
-                    fill="toself",
+                    r=vals + [vals[0]], theta=cats, fill="toself",
                     name=row["model_name"],
                     line=dict(color=MODEL_COLORS[i % len(MODEL_COLORS)], width=2),
-                    fillcolor=MODEL_COLORS[i % len(MODEL_COLORS)] + "33",
+                    fillcolor=RADAR_FILLS[i % len(RADAR_FILLS)],
                 ))
             fig_rad.update_layout(
-                paper_bgcolor=DARK2,
-                plot_bgcolor=DARK2,
-                font=dict(color=WHITE, size=12),
+                paper_bgcolor=WHITE,
+                font=dict(color=DARK, size=12),
                 margin=dict(t=60, b=40, l=40, r=40),
                 polar=dict(
-                    bgcolor=DARK2,
-                    radialaxis=dict(
-                        visible=True, range=[0, 1],
-                        gridcolor="#2d3561", tickformat=".0%",
-                        tickfont=dict(size=9, color=WHITE),
-                    ),
-                    angularaxis=dict(gridcolor="#2d3561", tickfont=dict(size=11)),
+                    bgcolor=LIGHT,
+                    radialaxis=dict(visible=True, range=[0, 1],
+                                    gridcolor="#E5E7EB", tickformat=".0%",
+                                    tickfont=dict(size=9, color=GREY)),
+                    angularaxis=dict(gridcolor="#E5E7EB", tickfont=dict(size=11)),
                 ),
-                legend=dict(bgcolor=DARK2, bordercolor=DARK3, borderwidth=1),
-                title=dict(text="Radar des performances", font=dict(color=YELLOW, size=15)),
+                legend=dict(bgcolor=WHITE, bordercolor="#E5E7EB", borderwidth=1),
+                title=dict(text="Radar des performances", font=dict(color=NAVY, size=15)),
             )
             st.plotly_chart(fig_rad, use_container_width=True)
 
-    # ── Tab 3 : Feature Importance ────────────────────────────────────────────
+    # ── Tab 3 : Feature Importance ───────────────────────────────────────────
     with t3:
         if "rf" not in models:
             st.warning("Modèle Random Forest non chargé.")
         else:
+            rf  = models["rf"]
+            available_feats = [c for c in FEATURE_COLS if c in df.columns]
             try:
-                rf          = models["rf"]
-                importances = pd.Series(rf.feature_importances_, index=FEATURE_COLS).sort_values()
-                labels      = [FEATURE_LABELS.get(f, f) for f in importances.index]
-                q70, q40    = importances.quantile(0.7), importances.quantile(0.4)
-                colors_imp  = [
+                importances = pd.Series(
+                    rf.feature_importances_[:len(available_feats)],
+                    index=available_feats,
+                ).sort_values()
+                labels = [FEATURE_LABELS.get(f, f) for f in importances.index]
+                q70    = importances.quantile(0.7)
+                q40    = importances.quantile(0.4)
+                colors_imp = [
                     RED if v >= q70 else YELLOW if v >= q40 else "#74b9ff"
                     for v in importances.values
                 ]
 
                 fig_imp = go.Figure(go.Bar(
-                    x=importances.values,
-                    y=labels,
-                    orientation="h",
+                    x=importances.values, y=labels, orientation="h",
                     marker_color=colors_imp,
                     text=[f"{v*100:.1f}%" for v in importances.values],
                     textposition="outside",
-                    textfont=dict(size=11),
                 ))
                 fig_imp.update_layout(
-                    **_fig_layout(title="Feature Importance — Random Forest (Gini)"),
+                    **_fig_layout(title="Feature Importance — Random Forest"),
                     height=420,
                 )
                 fig_imp.update_xaxes(title="Importance", tickformat=".0%")
                 fig_imp.update_yaxes(gridcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig_imp, use_container_width=True)
 
-                # Légende couleurs
                 st.markdown(f"""
-                <div style="display:flex; gap:20px; margin-bottom:16px; flex-wrap:wrap;">
+                <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:8px;">
                     <span style="color:{RED}; font-weight:700;">■ Fort impact</span>
                     <span style="color:{YELLOW}; font-weight:700;">■ Impact modéré</span>
                     <span style="color:#74b9ff; font-weight:700;">■ Faible impact</span>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Top 3 interprétation
-                st.markdown(f"<h4 style='color:{YELLOW};'>Interprétation des 3 features clés</h4>",
-                            unsafe_allow_html=True)
-                top3 = pd.Series(rf.feature_importances_, index=FEATURE_COLS).nlargest(3)
-                for feat, val in top3.items():
-                    lbl  = FEATURE_LABELS.get(feat, feat)
-                    expl = FEATURE_EXPLAIN.get(feat, ("",))[0]
-                    bar_w = min(int(val * 600), 100)
-                    st.markdown(f"""
-                    <div style="background:{DARK2}; border:1px solid {DARK3}; border-radius:10px;
-                                padding:14px 18px; margin-bottom:10px;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                            <span style="color:{YELLOW}; font-weight:700;">{lbl}</span>
-                            <span style="color:{WHITE}; font-weight:600;">{val*100:.1f}%</span>
-                        </div>
-                        <div style="background:{DARK3}; border-radius:4px; height:8px; margin-bottom:8px;">
-                            <div style="background:{RED}; border-radius:4px; height:8px; width:{bar_w}%;"></div>
-                        </div>
-                        <p style="color:{WHITE}; font-size:0.85rem; opacity:0.8; margin:0;">{expl}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
             except Exception as exc:
                 st.error(f"Erreur feature importance : {exc}")
 
-    # ── Tab 4 : Explications ──────────────────────────────────────────────────
+    # ── Tab 4 : Explications ─────────────────────────────────────────────────
     with t4:
-        st.markdown(f"<h3>Comment fonctionnent nos 3 modèles ?</h3>", unsafe_allow_html=True)
+        rf_acc  = float(metrics_df[metrics_df["model_key"] == "random_forest"]["accuracy"].iloc[0]) * 100 if metrics_df is not None else 0
+        xgb_acc = float(metrics_df[metrics_df["model_key"] == "xgboost"]["accuracy"].iloc[0]) * 100 if metrics_df is not None else 0
+        km_acc  = float(metrics_df[metrics_df["model_key"] == "kmeans"]["accuracy"].iloc[0]) * 100 if metrics_df is not None else 0
 
-        # RF
-        st.markdown(f"""
-        <div style="background:{DARK2}; border:1px solid {DARK3}; border-left:4px solid {RED};
-                    border-radius:12px; padding:20px 24px; margin-bottom:16px;">
-            <div style="font-size:1.6rem; margin-bottom:8px;">🌲</div>
-            <div style="color:{YELLOW}; font-size:1.1rem; font-weight:800; margin-bottom:10px;">
-                Random Forest
-                <span style="background:{GREEN}22; color:{GREEN}; border-radius:8px;
-                             padding:2px 10px; font-size:0.78rem; margin-left:8px;">
-                    Accuracy : {float(metrics_df[metrics_df['model_key']=='random_forest']['accuracy'].iloc[0])*100:.1f}% 🏆
-                </span>
+        for emoji, name, acc, color, body in [
+            ("🌲", "Random Forest", rf_acc, NAVY,
+             "Imaginez <strong>100 experts indépendants</strong> (les arbres) qui analysent chacun "
+             "les conditions de l'accident et votent. La décision finale est celle de la majorité.<br><br>"
+             "<strong>✅ Avantages :</strong> robuste, résistant au surapprentissage, feature importance lisible.<br>"
+             "<strong>⚠️ Limite :</strong> moins réactif sur des données très déséquilibrées."),
+            ("⚡", "XGBoost", xgb_acc, ORANGE,
+             "XGBoost apprend de ses erreurs à chaque itération. Chaque nouvel arbre corrige "
+             "les cas mal classés par le précédent — c'est le <strong>favori des compétitions ML</strong>.<br><br>"
+             "<strong>✅ Avantages :</strong> haute performance, gère bien les données déséquilibrées.<br>"
+             "<strong>⚠️ Limite :</strong> boîte noire, nécessite plus de réglage."),
+            ("🔵", "KMeans (non supervisé)", km_acc, GREEN,
+             "KMeans regroupe automatiquement les accidents similaires <strong>SANS connaître leur gravité</strong>. "
+             "Il détecte 3 profils naturels d'accidents sur autoroute.<br><br>"
+             "<strong>✅ Avantages :</strong> non supervisé, découvre des patterns cachés.<br>"
+             "<strong>⚠️ Limite :</strong> ne prédit pas directement, moins précis en classification."),
+        ]:
+            st.markdown(f"""
+            <div style="background:{WHITE}; border:1px solid #E5E7EB; border-left:5px solid {color};
+                        border-radius:12px; padding:22px 26px; margin-bottom:16px;
+                        box-shadow:0 2px 8px rgba(0,48,135,0.06);">
+                <div style="font-size:1.6rem; margin-bottom:8px;">{emoji}</div>
+                <div style="color:{NAVY}; font-size:1.1rem; font-weight:800; margin-bottom:10px;">
+                    {name}
+                    <span style="background:{LIGHT}; color:{color}; border-radius:8px;
+                                 padding:2px 12px; font-size:0.78rem; margin-left:8px; font-weight:700;">
+                        Accuracy : {acc:.1f}%
+                    </span>
+                </div>
+                <p style="color:{GREY}; line-height:1.75; margin:0;">{body}</p>
             </div>
-            <p style="color:{WHITE}; line-height:1.75; margin:0;">
-                Imaginez <strong style="color:{YELLOW};">200 experts indépendants</strong> (les "arbres") qui analysent
-                chacun la carte et votent. La décision finale est celle de la majorité.<br><br>
-                <strong>✅ Avantages :</strong> très stable, résistant aux données aberrantes,
-                facile à interpréter via la feature importance.<br>
-                <strong>⚠️ Limite :</strong> peut être plus lent à l'entraînement sur de très gros datasets.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # XGBoost
-        st.markdown(f"""
-        <div style="background:{DARK2}; border:1px solid {DARK3}; border-left:4px solid {YELLOW};
-                    border-radius:12px; padding:20px 24px; margin-bottom:16px;">
-            <div style="font-size:1.6rem; margin-bottom:8px;">⚡</div>
-            <div style="color:{YELLOW}; font-size:1.1rem; font-weight:800; margin-bottom:10px;">
-                XGBoost
-                <span style="background:{ORANGE}22; color:{ORANGE}; border-radius:8px;
-                             padding:2px 10px; font-size:0.78rem; margin-left:8px;">
-                    Accuracy : {float(metrics_df[metrics_df['model_key']=='xgboost']['accuracy'].iloc[0])*100:.1f}%
-                </span>
-            </div>
-            <p style="color:{WHITE}; line-height:1.75; margin:0;">
-                XGBoost apprend de ses erreurs à chaque round. Chaque nouvel arbre
-                se concentre sur les cas mal classés par le précédent.
-                C'est le <strong style="color:{YELLOW};">favori des compétitions ML</strong>.<br><br>
-                <strong>✅ Avantages :</strong> haute performance, gère bien les données déséquilibrées.<br>
-                <strong>⚠️ Limite :</strong> nécessite plus de réglage, moins interprétable.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # KMeans
-        km_acc = float(metrics_df[metrics_df['model_key']=='kmeans']['accuracy'].iloc[0]) * 100 if metrics_df is not None else 0
-        st.markdown(f"""
-        <div style="background:{DARK2}; border:1px solid {DARK3}; border-left:4px solid #74b9ff;
-                    border-radius:12px; padding:20px 24px; margin-bottom:16px;">
-            <div style="font-size:1.6rem; margin-bottom:8px;">🔵</div>
-            <div style="color:{YELLOW}; font-size:1.1rem; font-weight:800; margin-bottom:10px;">
-                KMeans — Clustering non supervisé
-                <span style="background:#74b9ff22; color:#74b9ff; border-radius:8px;
-                             padding:2px 10px; font-size:0.78rem; margin-left:8px;">
-                    Accuracy : {km_acc:.1f}%
-                </span>
-            </div>
-            <p style="color:{WHITE}; line-height:1.75; margin:0;">
-                KMeans regroupe automatiquement les cartes similaires <strong>SANS connaître les prix cibles</strong>.
-                Il détecte des patterns cachés dans les données et identifie 3 profils naturels.<br><br>
-                <strong>✅ Avantages :</strong> non supervisé, découvre des segments naturels dans les données.<br>
-                <strong>⚠️ Limite :</strong> ne prédit pas directement la valorisation, moins précis en classification.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
         # Clusters KMeans
-        st.markdown(f"<h4 style='color:{YELLOW};'>Les 3 profils identifiés par KMeans</h4>", unsafe_allow_html=True)
         if "kmeans" in models:
+            st.markdown(f"<h4 style='color:{ORANGE};'>Les 3 profils d'accidents identifiés par KMeans</h4>",
+                        unsafe_allow_html=True)
             try:
-                km  = models["kmeans"]
-                # fillna(0) pour éviter le crash sur les NaN
-                X   = df[FEATURE_COLS].fillna(0).astype(float)
-                lbs = km.predict(X)
+                km = models["kmeans"]
+                available = [c for c in FEATURE_COLS if c in df.columns]
+                X_km = df[available].fillna(0).astype(float)
+                labels_km = km.predict(X_km)
                 df_c = df.copy()
-                df_c["cluster"] = lbs
+                df_c["cluster"] = labels_km
 
                 cl1, cl2, cl3 = st.columns(3)
-                for col, (cid, cname) in zip([cl1, cl2, cl3], CLUSTER_NAMES.items()):
+                for col_w, (cid, cname) in zip([cl1, cl2, cl3], CLUSTER_NAMES.items()):
                     sub = df_c[df_c["cluster"] == cid]
                     if sub.empty:
                         continue
-                    dom_rarity = sub["rarity"].dropna().mode()
-                    dom_rarity = dom_rarity.iloc[0] if not dom_rarity.empty else "N/A"
-                    pct_holo   = sub["is_holo"].mean() * 100
-                    with col:
+                    pct_grave = sub["target"].mean() * 100
+                    with col_w:
                         st.markdown(f"""
-                        <div style="background:linear-gradient(135deg,{CLUSTER_COLORS[cid]}22,{DARK2});
-                                    border:2px solid {CLUSTER_COLORS[cid]}; border-radius:14px;
-                                    padding:20px; box-shadow:0 4px 14px rgba(0,0,0,0.3);">
-                            <div style="font-size:2rem; margin-bottom:8px;">{CLUSTER_EMOJIS[cid]}</div>
-                            <div style="color:{CLUSTER_COLORS[cid]}; font-weight:800; font-size:1rem; margin-bottom:12px;">
-                                {cname}
-                            </div>
-                            <div style="color:{WHITE}; font-size:0.85rem; line-height:1.8;">
-                                🃏 <strong>{len(sub):,}</strong> cartes<br>
-                                💰 Prix moyen : <strong>${sub['market_price'].mean():.2f}</strong><br>
-                                📊 Prix médian : <strong>${sub['market_price'].median():.2f}</strong><br>
-                                ⭐ Rareté dom. : <strong>{dom_rarity}</strong><br>
-                                ✨ % Holo : <strong>{pct_holo:.0f}%</strong>
+                        <div style="background:{WHITE}; border:2px solid {CLUSTER_COLORS[cid]};
+                                    border-radius:14px; padding:20px;
+                                    box-shadow:0 3px 10px rgba(0,48,135,0.08);">
+                            <div style="color:{CLUSTER_COLORS[cid]}; font-weight:800;
+                                        font-size:1rem; margin-bottom:12px;">{cname}</div>
+                            <div style="color:{GREY}; font-size:0.85rem; line-height:1.8;">
+                                🚧 <strong>{len(sub):,}</strong> usagers<br>
+                                ⚠️ Taux gravité : <strong>{pct_grave:.1f}%</strong><br>
+                                ⚡ Vit. moy. : <strong>{sub['vma'].mean():.0f} km/h</strong><br>
+                                🌧️ Météo dom. : <strong>{ATM_LABELS.get(int(sub['atm'].mode().iloc[0]), '?') if not sub['atm'].mode().empty else '?'}</strong>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
             except Exception as exc:
-                st.error(f"Erreur lors du calcul des clusters : {exc}")
-        else:
-            st.info("Modèle KMeans non chargé.")
+                st.error(f"Erreur clusters : {exc}")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 PAGES = {
-    "🏠 Accueil":             ("accueil",     page_accueil,     False),
-    "📊 Dashboard des cotes": ("dashboard",   page_dashboard,   False),
-    "🔮 Prédiction":          ("prediction",  page_prediction,  True),
-    "⚖️ Comparaison modèles": ("comparaison", page_comparaison, True),
+    "🛣️ Contexte Vinci":        ("contexte",    page_contexte,    False),
+    "📊 Dashboard accidents":   ("dashboard",   page_dashboard,   False),
+    "🚨 Prédiction gravité":    ("prediction",  page_prediction,  True),
+    "⚖️ Comparaison modèles":   ("comparaison", page_comparaison, True),
 }
 
 
 def build_app() -> None:
     st.set_page_config(
-        page_title="Pokemon Card Investor",
-        page_icon="🎴",
+        page_title="Vinci Autoroutes — IA Accidents",
+        page_icon="🛣️",
         layout="wide",
         initial_sidebar_state="expanded",
     )
     st.markdown(_CSS, unsafe_allow_html=True)
 
-    try:
-        df     = load_data()
-        models = load_models()
-    except Exception as exc:
-        st.error(f"Erreur critique au chargement : {exc}")
-        st.stop()
+    df     = load_data()
+    models = load_models()
 
     with st.sidebar:
         st.markdown(f"""
-        <div style="text-align:center; padding:24px 0 16px;">
-            <div style="font-size:3.5rem;">🎴</div>
-            <div style="color:{YELLOW}; font-size:1.15rem; font-weight:900; margin-top:8px;">
-                Pokemon Card Investor
+        <div style="text-align:center; padding:28px 0 18px;">
+            <div style="font-size:3rem;">🛣️</div>
+            <div style="color:{WHITE}; font-size:1.05rem; font-weight:900; margin-top:8px;">
+                Vinci Autoroutes
             </div>
-            <div style="color:{WHITE}; font-size:0.78rem; opacity:0.65; margin-top:4px;">
-                ML · {len(df):,} cartes · {len(models)} modèles chargés
+            <div style="color:rgba(255,255,255,0.6); font-size:0.75rem; margin-top:4px;">
+                Prédiction accidents graves
             </div>
         </div>
+        <hr style="border-color:{ORANGE}; margin:0 0 14px;">
         """, unsafe_allow_html=True)
 
-        st.markdown(f"<hr style='border-color:{RED}; margin:0 0 16px;'>", unsafe_allow_html=True)
-
-        page_name = st.radio(
-            "Navigation",
-            options=list(PAGES.keys()),
-            label_visibility="collapsed",
-        )
+        page_name = st.radio("Navigation", list(PAGES.keys()),
+                             label_visibility="collapsed")
 
         st.divider()
 
+        n_acc = df["Num_Acc"].nunique() if "Num_Acc" in df.columns else len(df)
+        pct_g = df["target"].mean() * 100
         st.markdown(f"""
-        <div style="background:{DARK3}; border-radius:10px; padding:14px; margin-top:4px;">
-            <p style="color:{YELLOW}; font-weight:800; margin:0 0 8px; font-size:0.82rem;">📊 À propos du dataset</p>
-            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🃏 {len(df):,} cartes analysées</p>
-            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">📦 {df['set_name'].nunique()} sets différents</p>
-            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">📅 {df['year'].min()} — {df['year'].max()}</p>
-            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">💰 Prix moyen ${df['market_price'].mean():.2f}</p>
-            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">📈 {df['target'].mean()*100:.1f}% cartes valorisées</p>
+        <div style="background:rgba(255,255,255,0.08); border-radius:10px; padding:14px; margin-top:4px;">
+            <p style="color:{ORANGE}; font-weight:800; margin:0 0 8px; font-size:0.82rem;">📊 Dataset BAAC</p>
+            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🚗 {len(df):,} usagers</p>
+            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🚧 {n_acc:,} accidents</p>
+            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">📅 2020 – 2024</p>
+            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🏎️ Autoroutes (catr=1)</p>
+            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0; font-weight:700;">
+                ⚠️ {pct_g:.1f}% accidents graves</p>
+            <p style="color:{WHITE}; font-size:0.78rem; margin:3px 0;">🤖 {len(models)} modèles chargés</p>
         </div>
         """, unsafe_allow_html=True)
 

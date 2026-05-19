@@ -1,4 +1,4 @@
 model_key,model_name,model_path,accuracy,f1,precision,recall
-random_forest,Random Forest,C:\Users\pablo\Documents\ml-poc-project\models\random_forest.joblib,0.8002030972328003,0.8262840546449011,0.8772995343374987,0.8002030972328003
-xgboost,XGBoost,C:\Users\pablo\Documents\ml-poc-project\models\xgboost.joblib,0.787001777100787,0.8160848553942252,0.8734409114234467,0.787001777100787
-kmeans,KMeans,C:\Users\pablo\Documents\ml-poc-project\models\kmeans.joblib,0.6095455699416096,0.6753812053510695,0.8036880458181926,0.6095455699416096
+random_forest,Random Forest,C:\Users\pablo\Documents\ml-poc-project\models\random_forest.joblib,0.5760352041552446,0.5749481542836318,0.5790048427805642,0.5760352041552446
+xgboost,XGBoost,C:\Users\pablo\Documents\ml-poc-project\models\xgboost.joblib,0.5554754003751262,0.5539934157248931,0.5585524413541636,0.5554754003751262
+kmeans,KMeans,C:\Users\pablo\Documents\ml-poc-project\models\kmeans.joblib,0.45318135911123936,0.45942541377508495,0.48874236786247643,0.45318135911123936

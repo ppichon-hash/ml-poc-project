@@ -2,25 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import pickle
 import sys
 from pathlib import Path
 from typing import Any
 
-# Ensure src/ is on sys.path so joblib can reconstruct KMeansWrapper
-_SRC_DIR = Path(__file__).resolve().parent
-if str(_SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(_SRC_DIR))
-
-class KMeansWrapper:
-    def __init__(self, kmeans, scaler):
-        self.kmeans = kmeans
-        self.scaler = scaler
-    
-    def predict(self, X):
-        import pandas as pd
-        X_scaled = self.scaler.transform(X.astype(float))
-        return self.kmeans.predict(X_scaled)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 
 def load_model(model_path: Path) -> Any:

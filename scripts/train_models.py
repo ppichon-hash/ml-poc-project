@@ -1,4 +1,4 @@
-"""Train Random Forest, XGBoost, and KMeans on Pokemon card data."""
+"""Entraîne et sauvegarde les 3 modèles ML sur le dataset BAAC autoroutes."""
 from __future__ import annotations
 
 import sys
@@ -9,75 +9,94 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import joblib
 import pandas as pd
+from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.utils.class_weight import compute_sample_weight
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
-from config import DATA_DIR, MODELS_DIR
+from config import DATA_DIR, MODELS_DIR, MODEL_METRICS_FILE
 from data import FEATURE_COLS, load_dataset_split
 from kmeans_wrapper import KMeansWrapper
+from metrics import compute_metrics
 
 X_train, X_test, y_train, y_test = load_dataset_split()
-print(f"Train: {X_train.shape}, Test: {X_test.shape}")
-print(f"Target distribution (train):\n{y_train.value_counts().to_string()}")
+print(f"Train : {X_train.shape}  Test : {X_test.shape}")
+print(f"Target (train) :\n{y_train.value_counts().to_string()}")
 
-# --- Random Forest ---
-print("\nTraining Random Forest...")
-sample_w = compute_sample_weight("balanced", y_train)
+metrics_rows: list[dict] = []
+
+# ── Random Forest ──────────────────────────────────────────────────────────────
+print("\nEntraînement Random Forest...")
 rf = RandomForestClassifier(
-    n_estimators=200,
-    max_depth=10,
-    min_samples_leaf=5,
-    class_weight="balanced",
+    n_estimators=100,
+    max_depth=8,
+    min_samples_leaf=10,
     random_state=42,
     n_jobs=-1,
 )
 rf.fit(X_train, y_train)
 rf_path = MODELS_DIR / "random_forest.joblib"
 joblib.dump(rf, rf_path)
-print(f"  Saved: {rf_path}")
+print(f"  Sauvegardé : {rf_path}")
 
-# --- XGBoost ---
-print("Training XGBoost...")
-scale_pos = (y_train == 0).sum() / (y_train == 1).sum()
+y_pred_rf = rf.predict(X_test)
+m = compute_metrics(y_test, y_pred_rf)
+print(f"  Accuracy : {m['accuracy']:.4f}  F1 : {m['f1']:.4f}")
+metrics_rows.append({"model_key": "random_forest", "model_name": "Random Forest",
+                     "model_path": str(rf_path), **{k: round(v, 4) for k, v in m.items()}})
+
+# ── XGBoost ───────────────────────────────────────────────────────────────────
+print("Entraînement XGBoost...")
+scale_pos = (y_train == 0).sum() / max((y_train == 1).sum(), 1)
 xgb = XGBClassifier(
-    n_estimators=200,
-    max_depth=6,
-    learning_rate=0.1,
-    scale_pos_weight=scale_pos,
-    eval_metric="logloss",
+    n_estimators=100,
     random_state=42,
+    eval_metric="logloss",
+    scale_pos_weight=scale_pos,
     n_jobs=-1,
     verbosity=0,
 )
 xgb.fit(X_train.astype(float), y_train)
 xgb_path = MODELS_DIR / "xgboost.joblib"
 joblib.dump(xgb, xgb_path)
-print(f"  Saved: {xgb_path}")
+print(f"  Sauvegardé : {xgb_path}")
 
-# --- KMeans ---
-print("Training KMeans (3 clusters)...")
-from sklearn.impute import SimpleImputer
-df_full = pd.read_csv(DATA_DIR / "pokemon_cards.csv")
-available_cols = [c for c in FEATURE_COLS if c in df_full.columns]
-X_all_raw = df_full[available_cols]
-imputer_km = SimpleImputer(strategy="median")
-X_all = pd.DataFrame(imputer_km.fit_transform(X_all_raw), columns=X_all_raw.columns)
-kmeans_wrapper = KMeansWrapper(n_clusters=3, random_state=42)
-kmeans_wrapper.fit(X_all)
-kmeans_path = MODELS_DIR / "kmeans.joblib"
-joblib.dump(kmeans_wrapper, kmeans_path)
-print(f"  Saved: {kmeans_path}")
-
-# Quick validation
-from sklearn.metrics import accuracy_score, classification_report
-y_pred_rf = rf.predict(X_test)
 y_pred_xgb = xgb.predict(X_test.astype(float))
-print(f"\nRandom Forest accuracy: {accuracy_score(y_test, y_pred_rf):.4f}")
-print(classification_report(y_test, y_pred_rf))
-print(f"XGBoost accuracy: {accuracy_score(y_test, y_pred_xgb):.4f}")
-print(classification_report(y_test, y_pred_xgb))
+m = compute_metrics(y_test, y_pred_xgb)
+print(f"  Accuracy : {m['accuracy']:.4f}  F1 : {m['f1']:.4f}")
+metrics_rows.append({"model_key": "xgboost", "model_name": "XGBoost",
+                     "model_path": str(xgb_path), **{k: round(v, 4) for k, v in m.items()}})
 
-clusters = kmeans_wrapper.predict(X_test.astype(float))
-print(f"KMeans cluster counts: {pd.Series(clusters).value_counts().to_dict()}")
-print("\nAll models trained and saved successfully.")
+# ── KMeans ────────────────────────────────────────────────────────────────────
+print("Entraînement KMeans (3 clusters)...")
+df_full = pd.read_csv(DATA_DIR / "processed_dataset.csv")
+available = [c for c in FEATURE_COLS if c in df_full.columns]
+X_all = df_full[available].fillna(df_full[available].median()).astype(float)
+
+scaler  = StandardScaler()
+kmeans  = KMeans(n_clusters=3, random_state=42, n_init=10)
+wrapper = KMeansWrapper(kmeans=kmeans, scaler=scaler)
+wrapper.fit(X_all)
+
+kmeans_path = MODELS_DIR / "kmeans.joblib"
+joblib.dump(wrapper, kmeans_path)
+print(f"  Sauvegardé : {kmeans_path}")
+
+# Pseudo-accuracy : mapper chaque cluster vers le label majoritaire
+clusters_test = wrapper.predict(X_test)
+cluster_s = pd.Series(clusters_test)
+label_s   = y_test.reset_index(drop=True)
+mapping   = {c: int(label_s[cluster_s == c].mode().iloc[0])
+             for c in cluster_s.unique() if not label_s[cluster_s == c].empty}
+y_pred_km = cluster_s.map(mapping)
+m = compute_metrics(label_s, y_pred_km)
+print(f"  Pseudo-accuracy : {m['accuracy']:.4f}")
+metrics_rows.append({"model_key": "kmeans", "model_name": "KMeans",
+                     "model_path": str(kmeans_path), **{k: round(v, 4) for k, v in m.items()}})
+
+# ── Métriques ──────────────────────────────────────────────────────────────────
+mdf = pd.DataFrame(metrics_rows)
+mdf.to_csv(MODEL_METRICS_FILE, index=False)
+print(f"\nMétriques sauvegardées : {MODEL_METRICS_FILE}")
+print(mdf.to_string(index=False))
+print("\nTous les modèles entraînés avec succès.")
