@@ -802,30 +802,28 @@ def page_comparaison(df: pd.DataFrame, models: dict) -> None:
                               f"border-radius:12px; padding:3px 12px; font-size:0.78rem; "
                               f"font-weight:700;'>🏆 Meilleur modèle</span>" if is_best else "")
 
-                blocks = ""
-                for key, lbl in zip(METRIC_KEYS, METRIC_LBLS):
+                # Header card (no indented content to avoid Markdown code-block misparse)
+                st.markdown(
+                    f'<div style="background:{WHITE};border:2px solid {border_col};border-radius:14px;'
+                    f'padding:22px 24px 12px;margin-bottom:4px;box-shadow:0 2px 8px rgba(0,48,135,0.08);">'
+                    f'<span style="color:{NAVY};font-size:1.2rem;font-weight:800;">'
+                    f'{row.get("model_name", row["model_key"])}</span>{badge}</div>',
+                    unsafe_allow_html=True,
+                )
+                # Metric tiles via native Streamlit columns (avoids HTML-in-Markdown issue)
+                metric_cols = st.columns(4)
+                for mc, (key, lbl) in zip(metric_cols, zip(METRIC_KEYS, METRIC_LBLS)):
                     v   = float(row.get(key, 0)) * 100
                     clr = GREEN if v >= 70 else YELLOW if v >= 55 else RED
-                    blocks += f"""
-                    <div style="text-align:center; background:{LIGHT}; border-radius:10px; padding:14px 8px;">
-                        <div style="color:{GREY}; font-size:0.8rem; margin-bottom:6px;">{lbl}</div>
-                        <div style="color:{clr}; font-size:1.5rem; font-weight:800;">{v:.1f}%</div>
-                    </div>"""
-
-                st.markdown(f"""
-                <div style="background:{WHITE}; border:2px solid {border_col}; border-radius:14px;
-                            padding:22px 24px; margin-bottom:16px;
-                            box-shadow:0 2px 8px rgba(0,48,135,0.08);">
-                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-                        <span style="color:{NAVY}; font-size:1.2rem; font-weight:800;">
-                            {row.get('model_name', row['model_key'])}
-                        </span>{badge}
-                    </div>
-                    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
-                        {blocks}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    with mc:
+                        st.markdown(
+                            f'<div style="text-align:center;background:{LIGHT};border-radius:10px;'
+                            f'padding:14px 8px;margin-bottom:16px;">'
+                            f'<div style="color:{GREY};font-size:0.8rem;margin-bottom:6px;">{lbl}</div>'
+                            f'<div style="color:{clr};font-size:1.5rem;font-weight:800;">{v:.1f}%</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
 
     # ── Tab 2 : Graphiques ───────────────────────────────────────────────────
     with t2:
